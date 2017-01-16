@@ -1,0 +1,67 @@
+@startuml
+[*] --> InvitationPhase
+
+state InvitationPhase {
+  [*] --> NewRoundInvite
+
+  NewRoundInvite : "server->clients:\nROUND STARTING;token"
+  NewRoundInvite : token->receiver
+  NewRoundInvite --> GetJoinedPlayers
+
+  GetJoinedPlayers : "receive client->server:\nJOIN;token"
+  GetJoinedPlayers --> NoPlayersJoined : joined == 0
+  GetJoinedPlayers --> OnePlayerJoined : joined == 1
+  GetJoinedPlayers --> [*] : joined > 1
+
+  NoPlayersJoined : "server->clients:\nROUND CANCELED;NO_PLAYERS"
+  NoPlayersJoined --> NewRoundInvite
+
+  OnePlayerJoined : "server->clients:\nROUND CANCELED;ONLY_ONE_PLAYER"
+  OnePlayerJoined --> NewRoundInvite
+}
+InvitationPhase --> RoundPhase
+
+state RoundPhase {
+  [*] --> RoundStarted
+
+  RoundStarted : shuffle joined players
+  RoundStarted : "server->clients:\nROUND STARTED;rundennummer;spielernamen"
+  RoundStarted --> PlayerTurn
+
+  PlayerTurn : get next player
+  PlayerTurn : "server->client:\nYOUR TURN;token"
+  PlayerTurn : token->receiver
+  PlayerTurn --> GetPlayerAction
+
+  GetPlayerAction : "receive client->server:\ncommand;token"
+  GetPlayerAction --> RoundEnd : No turn taken
+  GetPlayerAction --> RoundEnd : Invalid command
+  GetPlayerAction --> PlayerRolls : command == ROLL
+  GetPlayerAction --> PlayerSees : command == SEE
+
+  PlayerRolls : roll dice
+  PlayerRolls : "server->clients:\nPLAYER ROLLS;name"
+  PlayerRolls : "server->client:\nROLLED;dice;token"
+  PlayerRolls : token->receiver
+  PlayerRolls --> GetPlayerRollAnnouncement
+
+  GetPlayerRollAnnouncement : "receive client->server:\nANNOUNCE;dice';token"
+  GetPlayerRollAnnouncement --> RoundEnd : No Announcement
+  GetPlayerRollAnnouncement : "server->clients:\nANNOUNCED;name;dice" 
+  GetPlayerRollAnnouncement --> RoundEnd : MIA Announced
+  GetPlayerRollAnnouncement --> RoundEnd : Losing Dice Announced
+  GetPlayerRollAnnouncement --> PlayerTurn
+
+  PlayerSees : "server->clients:\nPLAYER WANTS TO SEE;name\nACTUAL DICE;dice"
+  PlayerSees --> RoundEnd
+
+  RoundEnd : Determine loser & reason
+  RoundEnd : "server->clients:\nPLAYER LOST;names;reason"
+  RoundEnd --> AnnounceScore
+
+  AnnounceScore : "server->clients:\nSCORE;spielerpunkte"
+  AnnounceScore --> [*]
+}
+RoundPhase --> InvitationPhase
+
+@enduml
