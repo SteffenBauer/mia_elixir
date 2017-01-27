@@ -4,9 +4,10 @@ defmodule EchoServer do
   def start(_type, _args) do
     import Supervisor.Spec, warn: false
 
+    port = Application.get_env(:echo_server, :port)
+
     children = [
-      # Starts a worker by calling: EchoServer.Worker.start_link(arg1, arg2, arg3)
-      # worker(EchoServer.Worker, [arg1, arg2, arg3]),
+      worker(Task, [EchoServer.UDP, :accept, [port]]),
     ]
 
     opts = [strategy: :one_for_one, name: EchoServer.Supervisor]
