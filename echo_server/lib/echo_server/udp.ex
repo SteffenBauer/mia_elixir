@@ -27,5 +27,3 @@ defmodule EchoServer.UDP do
   end
 
 end
-
-
