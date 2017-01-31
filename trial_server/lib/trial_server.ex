@@ -5,12 +5,10 @@ defmodule TrialServer do
     import Supervisor.Spec, warn: false
 
     children = [
-      # Starts a worker by calling: TrialServer.Worker.start_link(arg1, arg2, arg3)
-      # worker(TrialServer.Worker, [arg1, arg2, arg3]),
+      worker(Task, [TrialServer.UDP, :accept, []]),
     ]
 
     opts = [strategy: :one_for_one, name: TrialServer.Supervisor]
     Supervisor.start_link(children, opts)
   end
 end
-
