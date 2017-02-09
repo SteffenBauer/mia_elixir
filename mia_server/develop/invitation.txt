@@ -1,0 +1,29 @@
+@startuml
+
+Server -> Client_A: ROUND STARTING;token_a
+Server -> Client_B: ROUND STARTING;token_b
+Server -> Spectator: ROUND STARTING
+
+alt players join
+
+  Client_A -> Server: JOIN;token_a
+  Client_B -> Server: JOIN;token_b
+
+else No players join
+
+  Server -> Server: Timeout
+  Server -> Client_A: ROUND CANCELED;NO_PLAYERS
+  Server -> Client_B: ROUND CANCELED;NO_PLAYERS
+  Server -> Spectator: ROUND CANCELED;NO_PLAYERS
+
+else Only one player joins
+
+  Client_A -> Server: JOIN;token_a
+  Server -> Server: Timeout
+  Server -> Client_A: ROUND CANCELED;ONLY_ONE_PLAYER
+  Server -> Client_B: ROUND CANCELED;ONLY_ONE_PLAYER
+  Server -> Spectator: ROUND CANCELED;ONLY_ONE_PLAYER
+
+end
+@enduml
+

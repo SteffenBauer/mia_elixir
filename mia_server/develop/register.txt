@@ -1,0 +1,19 @@
+@startuml
+
+group Register New Player
+  Client -> Server: REGISTER;name
+  alt Valid name, not registered yet
+    Server -> Client: REGISTERED
+  else Name invalid or registered by someone else
+    Server -> Client: REJECTED
+  else Name already registered from that IP
+    Server -> Client: ALREADY REGISTERED
+  end
+end
+
+group Register new spectator
+  Spectator -> Server: REGISTER_SPECTATOR
+  Server -> Spectator: REGISTERED
+end
+
+@enduml
