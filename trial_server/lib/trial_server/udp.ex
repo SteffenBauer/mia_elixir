@@ -12,13 +12,22 @@ defmodule TrialServer.UDP do
   defp serve(socket) do
     socket
     |> read_line()
+    |> TrialServer.Trial.handle_packet()
+    |> reply(socket)
 
     serve(socket)
   end
 
   defp read_line(socket) do
     {:ok, {addr, port, data}} = :gen_udp.recv(socket, 0)
-    {addr, port, data}
+    {addr, port, data |> String.trim()}
+  end
+
+  defp reply(nil, _socket) do
+    Logger.debug("No response")
+  end
+  defp reply({addr, port, response}, socket) do
+    :gen_udp.send(socket, addr, port, response)
   end
 
 end
