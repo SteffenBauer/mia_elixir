@@ -3,7 +3,7 @@ defmodule TrialServer.Store do
   require Logger
 
   defstruct addr: nil, port: nil, uuid: nil,
-            solution: nil, trials: nil, correct: 0, wrong: 0
+            solution: nil, trials: 5, correct: 0, wrong: 0
 
   def init() do
     Logger.debug("TrialServer Store started")
@@ -15,6 +15,8 @@ defmodule TrialServer.Store do
   end
 
   def new_trial(addr, port, uuid, solution) do
-
+    Agent.update(__MODULE__, &(&1 ++ [%TrialServer.Store{addr: addr, port: port, uuid: uuid, solution: solution}]))
+    Logger.debug("In store now: #{inspect Agent.get(__MODULE__, &(&1))}")
   end
+
 end
