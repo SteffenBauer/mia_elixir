@@ -6,7 +6,7 @@ defmodule TrialServer do
 
     children = [
       worker(Task, [TrialServer.UDP, :accept, []]),
-      worker(Agent, [TrialServer.Store, :init, [], [name: TrialServer.Store]])
+      worker(Agent, [TrialServer.Store, :init, []])
     ]
 
     opts = [strategy: :one_for_one, name: TrialServer.Supervisor]

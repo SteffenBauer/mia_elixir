@@ -6,6 +6,7 @@ defmodule TrialServer.Store do
             solution: nil, trials: 5, correct: 0, wrong: 0
 
   def init() do
+    Process.register(self(), __MODULE__)
     Logger.debug("TrialServer Store started")
     []
   end

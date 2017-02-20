@@ -2,6 +2,8 @@ defmodule TrialServer.Trial do
 
   require Logger
 
+  @solution ~r/^([0-9a-fA-F]{32}):(-?[0-9]+)/
+
   def handle_packet({addr, port, "START"}) do
     Logger.debug("Received START from #{inspect addr}:#{inspect port}")
     {addr, port} |> new_trial()
@@ -9,7 +11,14 @@ defmodule TrialServer.Trial do
 
   def handle_packet({addr, port, data}) do
     Logger.debug("Received '#{data}' from #{inspect addr}:#{inspect port}")
-    nil
+    case Regex.run(@solution, data) do
+      [_, uuid, solution] -> handle_solution(addr, port, uuid, solution)
+      _ -> nil
+    end
+  end
+
+  defp handle_solution(addr, port, uuid, solution) do
+    nil # To Do
   end
 
   defp new_trial({addr, port}) do
