@@ -12,17 +12,23 @@ defmodule TrialServer.Trial do
   def handle_packet({addr, port, data}) do
     Logger.debug("Received '#{data}' from #{inspect addr}:#{inspect port}")
     case Regex.run(@solution, data) do
-      [_, uuid, solution] -> handle_solution(addr, port, uuid, solution)
+      [_, uuid, solution] -> handle_solution(addr, port, uuid, String.to_integer(solution))
       _ -> nil
     end
   end
 
   defp handle_solution(addr, port, uuid, solution) do
-    nil # To Do
+    Logger.debug("Testing received solution '#{solution}' from uuid #{uuid}")
+    TrialServer.Store.update_trial(uuid, solution)
+    if TrialServer.Store.is_finished?(addr, port) do
+      # pop from store |> total result
+    else
+      # new trial
+    end
   end
 
   defp new_trial({addr, port}) do
-    if TrialServer.Store.addr_in_store?(addr) do
+    if TrialServer.Store.addr_in_store?(addr, port) do
       nil
     else
       {trial, uuid, solution} = generate_trial()

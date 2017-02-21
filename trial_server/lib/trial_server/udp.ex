@@ -15,6 +15,8 @@ defmodule TrialServer.UDP do
     |> TrialServer.Trial.handle_packet()
     |> reply(socket)
 
+    TrialServer.Store.print_store()
+
     serve(socket)
   end
 
