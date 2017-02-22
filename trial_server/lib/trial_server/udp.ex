@@ -3,6 +3,7 @@ defmodule TrialServer.UDP do
   require Logger
 
   def accept() do
+    Process.flag(:trap_exit, true)
     port = Application.get_env(:trial_server, :port)
     {:ok, socket} = :gen_udp.open(port, [:binary, active: true])
     Logger.info "Listening on udp port #{port}"
@@ -12,20 +13,23 @@ defmodule TrialServer.UDP do
   defp serve(socket) do
     receive do
       {:udp, ^socket, ip, port, data} ->
-        {ip, port, data |> String.trim()}
+        Logger.debug("Received '#{inspect data}' from #{inspect ip}:#{inspect port}")
+        {ip, port, String.trim(data)}
         |> TrialServer.Trial.handle_packet()
         |> reply(socket)
-      other -> Logger.debug "UDP task received message '#{inspect other}'"
+        serve(socket)
+      {:EXIT, _pid, :shutdown} ->
+        :gen_udp.close(socket)
+      other ->
+        Logger.error "UDP task received unexpected message '#{inspect other}'"
     end
-
-    TrialServer.Store.print_store()
-    serve(socket)
   end
 
   defp reply(nil, _socket) do
     Logger.debug("No response")
   end
   defp reply({addr, port, response}, socket) do
+    Logger.debug("Send '#{inspect response}' to #{inspect addr}:#{inspect port}")
     :gen_udp.send(socket, addr, port, response)
   end
 

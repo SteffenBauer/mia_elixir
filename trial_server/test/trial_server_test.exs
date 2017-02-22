@@ -1,10 +1,14 @@
 defmodule TrialServerTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: false
+  require Logger
   doctest TrialServer
 
   setup do
     Application.start(:trial_server)
-    on_exit fn -> Application.stop(:trial_server) end
+    on_exit fn ->
+      Application.stop(:trial_server)
+      Logger.flush()
+    end
   end
 
   setup do
