@@ -4,25 +4,22 @@ defmodule TrialServer.UDP do
 
   def accept() do
     port = Application.get_env(:trial_server, :port)
-    {:ok, socket} = :gen_udp.open(port, [:binary, active: false])
+    {:ok, socket} = :gen_udp.open(port, [:binary, active: true])
     Logger.info "Listening on udp port #{port}"
     serve(socket)
   end
 
   defp serve(socket) do
-    socket
-    |> read_line()
-    |> TrialServer.Trial.handle_packet()
-    |> reply(socket)
+    receive do
+      {:udp, ^socket, ip, port, data} ->
+        {ip, port, data |> String.trim()}
+        |> TrialServer.Trial.handle_packet()
+        |> reply(socket)
+      other -> Logger.debug "UDP task received message '#{inspect other}'"
+    end
 
     TrialServer.Store.print_store()
-
     serve(socket)
-  end
-
-  defp read_line(socket) do
-    {:ok, {addr, port, data}} = :gen_udp.recv(socket, 0)
-    {addr, port, data |> String.trim()}
   end
 
   defp reply(nil, _socket) do
