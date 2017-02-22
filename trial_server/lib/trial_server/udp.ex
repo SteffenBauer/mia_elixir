@@ -14,20 +14,20 @@ defmodule TrialServer.UDP do
     receive do
       {:udp, ^socket, ip, port, data} ->
         Logger.debug("Received '#{inspect data}' from #{inspect ip}:#{inspect port}")
-        {ip, port, String.trim(data)}
-        |> TrialServer.Trial.handle_packet()
-        |> reply(socket)
-        serve(socket)
+        Task.async(fn -> TrialServer.Trial.handle_packet({ip, port, String.trim(data)}) end)
       {:EXIT, _pid, :shutdown} ->
         :gen_udp.close(socket)
+        exit(:normal)
+      {_ref, {ip, port, reply}} ->
+        reply({ip, port, reply}, socket)
+      {_ref, nil} ->
+        Logger.debug("No response")
       other ->
-        Logger.error "UDP task received unexpected message '#{inspect other}'"
+        Logger.info "UDP task received unexpected message '#{inspect other}'"
     end
+    serve(socket)
   end
 
-  defp reply(nil, _socket) do
-    Logger.debug("No response")
-  end
   defp reply({addr, port, response}, socket) do
     Logger.debug("Send '#{inspect response}' to #{inspect addr}:#{inspect port}")
     :gen_udp.send(socket, addr, port, response)
