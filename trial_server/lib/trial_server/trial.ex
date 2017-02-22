@@ -19,12 +19,23 @@ defmodule TrialServer.Trial do
 
   defp handle_solution(addr, port, uuid, solution) do
     Logger.debug("Testing received solution '#{solution}' from uuid #{uuid}")
-    TrialServer.Store.update_trial(uuid, solution)
-    if TrialServer.Store.is_finished?(addr, port) do
-      # pop from store |> total result
+    trial = TrialServer.Store.pop_trial(uuid)
+         |> hd
+         |> update_values(solution)
+    if trial.trials == 0 do
+      {addr, port, generate_summary(trial)}
     else
-      # new trial
+      {t, uuid, solution} = generate_trial()
+      TrialServer.Store.put_trial(%{trial | uuid: uuid, solution: solution})
+      {addr, port, t}
     end
+  end
+
+  defp generate_summary(%{correct: _correct, wrong: 0}) do
+    "ALL CORRECT"
+  end
+  defp generate_summary(%{correct: correct, wrong: wrong}) do
+    "#{wrong} WRONG #{correct} CORRECT"
   end
 
   defp new_trial({addr, port}) do
@@ -32,7 +43,7 @@ defmodule TrialServer.Trial do
       nil
     else
       {trial, uuid, solution} = generate_trial()
-      TrialServer.Store.new_trial(addr, port, uuid, solution)
+      TrialServer.Store.put_trial(%{addr: addr, port: port, uuid: uuid, solution: solution, trials: 5, correct: 0, wrong: 0})
       {addr, port, trial}
     end
   end
@@ -49,6 +60,13 @@ defmodule TrialServer.Trial do
     Logger.debug("Trial #{ty} #{inspect nums} with solution #{solution}")
     trial = ty <> ":" <> u <> ":" <> Enum.join(nums, ":")
     {trial, u, solution}
+  end
+
+  defp update_values(t, solution) do
+    case t.solution do
+      ^solution -> %{t | trials: t.trials - 1, correct: t.correct + 1}
+      _         -> %{t | trials: t.trials - 1, wrong:   t.wrong + 1}
+    end
   end
 
 end

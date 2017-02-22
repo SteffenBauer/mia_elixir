@@ -2,9 +2,6 @@ defmodule TrialServer.Store do
 
   require Logger
 
-  defstruct addr: nil, port: nil, uuid: nil,
-            solution: nil, trials: 5, correct: 0, wrong: 0
-
   def init() do
     Process.register(self(), __MODULE__)
     Logger.debug("TrialServer Store started")
@@ -19,20 +16,14 @@ defmodule TrialServer.Store do
     Agent.get(__MODULE__, fn e -> Enum.any?(e, &(&1.addr == addr and &1.port == port)) end)
   end
 
-  def new_trial(addr, port, uuid, solution) do
-    Agent.update(__MODULE__, &(&1 ++ [%TrialServer.Store{addr: addr, port: port, uuid: uuid, solution: solution}]))
+  def put_trial(trial) do
+    Agent.update(__MODULE__, &(&1 ++ [trial]))
   end
 
-  def update_trial(uuid, solution) do
-    Agent.update(__MODULE__, &(Enum.map(&1, fn t -> update_values(t, uuid, solution) end)))
-  end
-
-  defp update_values(t, uuid, solution) do
-    case {t.uuid, t.solution} do
-      {^uuid, ^solution} -> %TrialServer.Store{t | trials: t.trials - 1, correct: t.correct + 1}
-      {^uuid, _}         -> %TrialServer.Store{t | trials: t.trials - 1, wrong: t.wrong + 1}
-      {_,     _}         -> t
-    end
+  def pop_trial(uuid) do
+    {trials, store} = Agent.get(__MODULE__, &(Enum.split_with(&1, fn t -> t.uuid == uuid end)))
+    Agent.update(__MODULE__, fn _ -> store end)
+    trials
   end
 
 end
