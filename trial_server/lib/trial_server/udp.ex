@@ -1,36 +1,54 @@
 defmodule TrialServer.UDP do
-
+  use GenServer
   require Logger
 
-  def accept() do
+  def start_link() do
+    GenServer.start_link(__MODULE__, :ok, [name: __MODULE__])
+  end
+
+  def reply(message) do
+    GenServer.cast(__MODULE__, message)
+  end
+
+## GenServer Callbacks
+
+  def init(:ok) do
     Process.flag(:trap_exit, true)
     port = Application.get_env(:trial_server, :port)
     {:ok, socket} = :gen_udp.open(port, [:binary, active: true])
     Logger.info "Listening on udp port #{port}"
-    serve(socket)
+    {:ok, socket}
   end
 
-  defp serve(socket) do
-    receive do
-      {:udp, ^socket, ip, port, data} ->
-        Logger.debug("Received '#{inspect data}' from #{inspect ip}:#{inspect port}")
-        Task.async(fn -> TrialServer.Trial.handle_packet({ip, port, String.trim(data)}) end)
-      {:EXIT, _pid, :shutdown} ->
-        :gen_udp.close(socket)
-        exit(:normal)
-      {_ref, {ip, port, reply}} ->
-        reply({ip, port, reply}, socket)
-      {_ref, nil} ->
-        Logger.debug("No response")
-      other ->
-        Logger.info "UDP task received unexpected message '#{inspect other}'"
-    end
-    serve(socket)
-  end
-
-  defp reply({addr, port, response}, socket) do
+  def handle_cast({addr, port, response}, socket) do
     Logger.debug("Send '#{inspect response}' to #{inspect addr}:#{inspect port}")
-    :gen_udp.send(socket, addr, port, response)
+    :gen_udp.send(socket, addr, port, response <> "\n")
+    {:noreply, socket}
+  end
+
+  def handle_info({:udp, _socket, ip, port, data}, socket) do
+    Logger.debug("Received '#{inspect data}' from #{inspect ip}:#{inspect port}")
+    Task.async(fn -> TrialServer.Trial.handle_packet({ip, port, String.trim(data)}) end)
+    {:noreply, socket}
+  end
+
+  def handle_info({_ref, {ip, port, reply}}, socket) do
+    reply({ip, port, reply})
+    {:noreply, socket}
+  end
+
+  def handle_info({_ref, nil}, socket) do
+    Logger.debug("No response")
+    {:noreply, socket}
+  end
+
+  def handle_info(_other, socket) do
+    {:noreply, socket}
+  end
+
+  def terminate(reason, socket) do
+    Logger.info("Shutting down UDP server for reason #{reason}, socket is #{inspect socket}")
+    :gen_udp.close(socket)
   end
 
 end

@@ -6,7 +6,7 @@ defmodule TrialServer do
     import Supervisor.Spec, warn: false
 
     children = [
-      worker(Task, [TrialServer.UDP, :accept, []]),
+      worker(TrialServer.UDP, []),
       worker(Agent, [TrialServer.Store, :init, []])
     ]
 

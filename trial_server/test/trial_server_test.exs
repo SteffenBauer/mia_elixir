@@ -40,4 +40,26 @@ defmodule TrialServerTest do
     refute uuid == nextuuid
   end
 
+  test "Solve all trials correctly", %{socket: socket, port: port} do
+    trial = send_and_recv(socket, port, "START")
+    final = 1..5 |> Enum.reduce(trial, fn _, t ->
+      [_, _type, uuid, _nums] = Regex.run(@trial, t)
+      stored_trial = TrialServer.Store.pop_trial(uuid) |> hd
+      TrialServer.Store.put_trial(stored_trial)
+      send_and_recv(socket, port, "#{uuid}:#{stored_trial.solution}")
+    end)
+    assert final =~ "ALL CORRECT"
+  end
+
+  test "Fail all trials", %{socket: socket, port: port} do
+    trial = send_and_recv(socket, port, "START")
+    final = 1..5 |> Enum.reduce(trial, fn _, t ->
+      [_, _type, uuid, _nums] = Regex.run(@trial, t)
+      stored_trial = TrialServer.Store.pop_trial(uuid) |> hd
+      TrialServer.Store.put_trial(stored_trial)
+      send_and_recv(socket, port, "#{uuid}:#{stored_trial.solution+1}")
+    end)
+    assert final =~ "5 WRONG 0 CORRECT"
+  end
+
 end

@@ -1,7 +1,8 @@
 use Mix.Config
 
 config :trial_server,
-  port: 4080
+  port: 4080,
+  trials: 5
 
 config :logger,
   level: :debug

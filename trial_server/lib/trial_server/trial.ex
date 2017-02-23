@@ -8,8 +8,10 @@ defmodule TrialServer.Trial do
 
   def handle_packet({addr, port, data}) do
     case Regex.run(@solution, data) do
-      [_, uuid, solution] -> handle_solution(addr, port, uuid, String.to_integer(solution))
-      _ -> nil
+      [_, uuid, solution] ->
+        handle_solution(addr, port, uuid, String.to_integer(solution))
+      _ ->
+        nil
     end
   end
 
@@ -38,7 +40,10 @@ defmodule TrialServer.Trial do
       nil
     else
       {trial, uuid, solution} = generate_trial()
-      TrialServer.Store.put_trial(%{addr: addr, port: port, uuid: uuid, solution: solution, trials: 5, correct: 0, wrong: 0})
+      trials = Application.get_env(:trial_server, :trials)
+      TrialServer.Store.put_trial(%{addr: addr, port: port, uuid: uuid,
+                                    solution: solution, trials: trials,
+                                    correct: 0, wrong: 0})
       {addr, port, trial}
     end
   end
