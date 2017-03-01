@@ -25,6 +25,19 @@ defmodule TrialServerTest do
     data
   end
 
+  defp open_udp_socket() do
+    opts = [:binary, active: false]
+    {:ok, socket} = :gen_udp.open(0, opts)
+    port = Application.get_env(:trial_server, :port)
+    {socket, port}
+  end
+
+  defp get_stored_trial(uuid) do
+    stored_trial = TrialServer.Store.pop_trial(uuid) |> hd
+    TrialServer.Store.put_trial(stored_trial)
+    stored_trial
+  end
+
   @trial ~r/(ADD|SUBTRACT|MULTIPLY):([0-9a-fA-F]{32})(:[0-9]+)+/
 
   test "Start new trial round", %{socket: socket, port: port} do
@@ -44,8 +57,7 @@ defmodule TrialServerTest do
     trial = send_and_recv(socket, port, "START")
     final = 1..5 |> Enum.reduce(trial, fn _, t ->
       [_, _type, uuid, _nums] = Regex.run(@trial, t)
-      stored_trial = TrialServer.Store.pop_trial(uuid) |> hd
-      TrialServer.Store.put_trial(stored_trial)
+      stored_trial = get_stored_trial(uuid)
       send_and_recv(socket, port, "#{uuid}:#{stored_trial.solution}")
     end)
     assert final =~ "ALL CORRECT"
@@ -55,11 +67,28 @@ defmodule TrialServerTest do
     trial = send_and_recv(socket, port, "START")
     final = 1..5 |> Enum.reduce(trial, fn _, t ->
       [_, _type, uuid, _nums] = Regex.run(@trial, t)
-      stored_trial = TrialServer.Store.pop_trial(uuid) |> hd
-      TrialServer.Store.put_trial(stored_trial)
+      stored_trial = get_stored_trial(uuid)
       send_and_recv(socket, port, "#{uuid}:#{stored_trial.solution+1}")
     end)
     assert final =~ "5 WRONG 0 CORRECT"
+  end
+
+  test "Two clients", %{socket: socket, port: port} do
+    {socket2, port2} = open_udp_socket()
+    trial1 = send_and_recv(socket, port, "START")
+    trial2 = send_and_recv(socket2, port2, "START")
+    {final1, final2} = 1..5 |> Enum.reduce({trial1, trial2}, fn _, {t1, t2} ->
+      [_, _type, uuid1, _nums] = Regex.run(@trial, t1)
+      [_, _type, uuid2, _nums] = Regex.run(@trial, t2)
+      stored_trial1 = get_stored_trial(uuid1)
+      stored_trial2 = get_stored_trial(uuid2)
+      t1 = send_and_recv(socket, port, "#{uuid1}:#{stored_trial1.solution}")
+      t2 = send_and_recv(socket2, port2, "#{uuid2}:#{stored_trial2.solution+1}")
+      {t1, t2}
+    end)
+    assert final1 =~ "ALL CORRECT"
+    assert final2 =~ "5 WRONG 0 CORRECT"
+    :gen_udp.close(socket2)
   end
 
 end
