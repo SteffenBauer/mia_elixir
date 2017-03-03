@@ -8,6 +8,7 @@ PORT = 4080
 DEBUG = True
 
 players = dict()
+spectators = []
 
 class MiaHandler(SocketServer.BaseRequestHandler):
 
@@ -29,14 +30,16 @@ class MiaHandler(SocketServer.BaseRequestHandler):
   def _register_player(self, data, addr):
     name = data.split(';',1)[1]
     if not self._valid_name(name): return "REJECTED"
-    if players.has_key(name) and players[name]["ip"] == addr[0] and players[name]["port"] == addr[1]:
+    if players.has_key(name) and players[name]["ip"] == addr[0]: # and players[name]["port"] == addr[1]:
       return "ALREADY REGISTERED"
     if players.has_key(name): return "REJECTED"
     players[name] = {'mode': "PLAYER", 'ip': addr[0], 'port': addr[1], 'score': 0}
     return "REGISTERED"
 
   def _register_spectator(self, data, addr):
-    pass
+    if addr in spectators: return "ALREADY REGISTERED"
+    spectators.append(addr)
+    return "REGISTERED"
 
   def _valid_name(self, name):
     return len(name) <= 20 and name.isalnum()
