@@ -25,8 +25,8 @@ defmodule TrialServerTest do
     data
   end
 
-  defp open_udp_socket() do
-    opts = [:binary, active: false]
+  defp open_udp_socket(ip \\ {127,0,0,1}) do
+    opts = [:binary, active: false, ip: ip]
     {:ok, socket} = :gen_udp.open(0, opts)
     port = Application.get_env(:trial_server, :port)
     {socket, port}
@@ -74,7 +74,7 @@ defmodule TrialServerTest do
   end
 
   test "Two clients", %{socket: socket, port: port} do
-    {socket2, port2} = open_udp_socket()
+    {socket2, port2} = open_udp_socket({127,0,0,2})
     trial1 = send_and_recv(socket, port, "START")
     trial2 = send_and_recv(socket2, port2, "START")
     {final1, final2} = 1..5 |> Enum.reduce({trial1, trial2}, fn _, {t1, t2} ->

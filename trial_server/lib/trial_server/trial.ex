@@ -28,7 +28,7 @@ defmodule TrialServer.Trial do
     end
   end
 
-  defp generate_summary(%{correct: _correct, wrong: 0}) do
+  defp generate_summary(%{correct: correct, wrong: 0}) when correct > 0 do
     "ALL CORRECT"
   end
   defp generate_summary(%{correct: correct, wrong: wrong}) do
