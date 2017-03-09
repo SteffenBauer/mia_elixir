@@ -1,1 +1,1 @@
-ExUnit.start([trace: false, seed: 0, capture_log: false])
+ExUnit.start([trace: true, seed: 0, capture_log: false])

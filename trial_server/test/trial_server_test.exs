@@ -14,6 +14,7 @@ defmodule TrialServerTest do
   setup do
     opts = [:binary, active: false]
     {:ok, socket} = :gen_udp.open(0, opts)
+
     port = Application.get_env(:trial_server, :port)
     on_exit fn -> :gen_udp.close(socket) end
     {:ok, socket: socket, port: port}
@@ -21,7 +22,7 @@ defmodule TrialServerTest do
 
   defp send_and_recv(socket, port, command) do
     :ok = :gen_udp.send(socket, 'localhost', port, command)
-    {:ok, {_addr, _port, data}} = :gen_udp.recv(socket, 0)
+    {:ok, {_addr, _port, data}} = :gen_udp.recv(socket, 0, 1000)
     data
   end
 
@@ -75,15 +76,19 @@ defmodule TrialServerTest do
 
   test "Two clients", %{socket: socket, port: port} do
     {socket2, port2} = open_udp_socket({127,0,0,2})
-    trial1 = send_and_recv(socket, port, "START")
-    trial2 = send_and_recv(socket2, port2, "START")
+    :ok = :gen_udp.send(socket, 'localhost', port, "START")
+    :ok = :gen_udp.send(socket2, 'localhost', port2, "START")
+    {:ok, {_addr, _port, trial1}} = :gen_udp.recv(socket, 0, 1000)
+    {:ok, {_addr, _port, trial2}} = :gen_udp.recv(socket2, 0, 1000)
     {final1, final2} = 1..5 |> Enum.reduce({trial1, trial2}, fn _, {t1, t2} ->
       [_, _type, uuid1, _nums] = Regex.run(@trial, t1)
       [_, _type, uuid2, _nums] = Regex.run(@trial, t2)
       stored_trial1 = get_stored_trial(uuid1)
       stored_trial2 = get_stored_trial(uuid2)
-      t1 = send_and_recv(socket, port, "#{uuid1}:#{stored_trial1.solution}")
-      t2 = send_and_recv(socket2, port2, "#{uuid2}:#{stored_trial2.solution+1}")
+      :ok = :gen_udp.send(socket, 'localhost', port, "#{uuid1}:#{stored_trial1.solution}")
+      :ok = :gen_udp.send(socket2, 'localhost', port2, "#{uuid2}:#{stored_trial2.solution+1}")
+      {:ok, {_addr, _port, t1}} = :gen_udp.recv(socket, 0, 1000)
+      {:ok, {_addr, _port, t2}} = :gen_udp.recv(socket2, 0, 1000)
       {t1, t2}
     end)
     assert final1 =~ "ALL CORRECT"

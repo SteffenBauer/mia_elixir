@@ -28,7 +28,7 @@ defmodule TrialServer.UDP do
 
   def handle_info({:udp, _socket, ip, port, data}, socket) do
     Logger.debug("Received '#{inspect data}' from #{inspect ip}:#{inspect port}")
-    Task.async(fn -> TrialServer.Trial.handle_packet({ip, port, String.trim(data)}) end)
+    Task.Supervisor.async_nolink(TrialServer.TaskSupervisor, TrialServer.Trial, :handle_packet, [{ip, port, String.trim(data)}])
     {:noreply, socket}
   end
 

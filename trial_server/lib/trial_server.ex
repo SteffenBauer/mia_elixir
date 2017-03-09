@@ -6,8 +6,10 @@ defmodule TrialServer do
     import Supervisor.Spec, warn: false
 
     children = [
-      worker(TrialServer.UDP, []),
-      worker(Agent, [TrialServer.Store, :init, []])
+      worker(Registry, [:unique, Registry.Trial]),
+      worker(Agent, [TrialServer.Store, :init, []]),
+      supervisor(Task.Supervisor, [[name: TrialServer.TaskSupervisor]]),
+      worker(TrialServer.UDP, [])
     ]
 
     opts = [strategy: :one_for_one, name: TrialServer.Supervisor]

@@ -3,6 +3,7 @@ defmodule TrialServer.Trial do
   @solution ~r/^([0-9a-fA-F]{32}):(-?[0-9]+)/
 
   def handle_packet({addr, port, "START"}) do
+    Process.sleep(500)
     {addr, port} |> new_trial()
   end
 
