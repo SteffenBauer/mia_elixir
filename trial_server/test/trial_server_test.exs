@@ -34,7 +34,7 @@ defmodule TrialServerTest do
   end
 
   defp get_stored_trial(uuid) do
-    stored_trial = TrialServer.Store.pop_trial(uuid) |> hd
+    stored_trial = TrialServer.Store.pop_trial(uuid)
     TrialServer.Store.put_trial(stored_trial)
     stored_trial
   end

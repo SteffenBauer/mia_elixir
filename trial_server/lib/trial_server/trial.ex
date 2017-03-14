@@ -18,7 +18,6 @@ defmodule TrialServer.Trial do
 
   defp handle_solution(addr, port, uuid, solution) do
     trial = TrialServer.Store.pop_trial(uuid)
-         |> hd
          |> update_values(solution)
     if trial.trials == 0 do
       {addr, port, generate_summary(trial)}
