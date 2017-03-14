@@ -55,7 +55,7 @@ defmodule TrialServer.Trial do
     {ty, solution} = case :rand.uniform(3) do
       1 -> {"ADD",      Enum.sum(nums)}
       2 -> {"SUBTRACT", hd(nums) - Enum.sum(tl(nums))}
-      3 -> {"MULTIPLY", Enum.reduce(nums, &(&1*&2))}
+      3 -> {"MULTIPLY", Enum.reduce(nums, &*/2)}
     end
     trial = ty <> ":" <> u <> ":" <> Enum.join(nums, ":")
     {trial, u, solution}

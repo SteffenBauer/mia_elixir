@@ -22,8 +22,10 @@ defmodule TrialServerTest do
 
   defp send_and_recv(socket, port, command) do
     :ok = :gen_udp.send(socket, 'localhost', port, command)
-    {:ok, {_addr, _port, data}} = :gen_udp.recv(socket, 0, 1000)
-    data
+    case :gen_udp.recv(socket, 0, 1000) do
+      {:ok, {_addr, _port, data}} -> data
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   defp open_udp_socket(ip \\ {127,0,0,1}) do
@@ -94,6 +96,27 @@ defmodule TrialServerTest do
     assert final1 =~ "ALL CORRECT"
     assert final2 =~ "5 WRONG 0 CORRECT"
     :gen_udp.close(socket2)
+  end
+
+  test "Send wrong uuid", %{socket: socket, port: port} do
+    trial = send_and_recv(socket, port, "START")
+    [_, _type, uuid, _nums] = Regex.run(@trial, trial)
+    assert {:error, :timeout} == send_and_recv(socket, port, "1234:123")
+    nexttrial = send_and_recv(socket, port, "#{uuid}:0")
+    assert nexttrial =~ @trial
+    [_, _type, nextuuid, _nums] = Regex.run(@trial, nexttrial)
+    refute uuid == nextuuid
+  end
+
+  test "Ignore answer from wrong address", %{socket: socket, port: port} do
+    {socket2, port2} = open_udp_socket({127,0,0,2})
+    :ok = :gen_udp.send(socket, 'localhost', port, "START")
+    :ok = :gen_udp.send(socket2, 'localhost', port2, "START")
+    {:ok, {_addr, _port, trial}} = :gen_udp.recv(socket, 0, 1000)
+    [_, _type, uuid, _nums] = Regex.run(@trial, trial)
+    stored_trial = get_stored_trial(uuid)
+    assert {:error, :timeout} == send_and_recv(socket2, port2, "#{uuid}:#{stored_trial.solution}")
+    assert {:ok, _} = send_and_recv(socket, port, "#{uuid}:#{stored_trial.solution}")
   end
 
 end
