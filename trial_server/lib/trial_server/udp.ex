@@ -16,7 +16,7 @@ defmodule TrialServer.UDP do
     Process.flag(:trap_exit, true)
     port = Application.get_env(:trial_server, :port)
     {:ok, socket} = :gen_udp.open(port, [:binary, active: true])
-    Logger.info "Listening on udp port #{port}"
+    Logger.debug "Listening on udp port #{port}"
     {:ok, socket}
   end
 
@@ -47,7 +47,7 @@ defmodule TrialServer.UDP do
   end
 
   def terminate(reason, socket) do
-    Logger.info("Shutting down UDP server for reason #{reason}, socket is #{inspect socket}")
+    Logger.debug("Shutting down UDP server for reason #{reason}, socket is #{inspect socket}")
     :gen_udp.close(socket)
   end
 

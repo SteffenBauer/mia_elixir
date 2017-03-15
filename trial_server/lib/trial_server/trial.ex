@@ -3,7 +3,6 @@ defmodule TrialServer.Trial do
   @solution ~r/^([0-9a-fA-F]{32}):(-?[0-9]+)/
 
   def handle_packet({addr, port, "START"}) do
-    Process.sleep(500)
     {addr, port} |> new_trial()
   end
 
@@ -18,7 +17,7 @@ defmodule TrialServer.Trial do
 
   defp handle_solution(addr, port, uuid, solution) do
     trial = TrialServer.Store.pop_trial(uuid)
-         |> update_values(solution)
+      |> update_values(solution)
     if trial.trials == 0 do
       {addr, port, generate_summary(trial)}
     else

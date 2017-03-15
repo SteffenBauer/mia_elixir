@@ -5,7 +5,7 @@ config :trial_server,
   trials: 5
 
 config :logger,
-  level: :debug
+  level: :warn
 
 config :logger, :console,
   format: "$date $time [$level] $levelpad$message\n",
