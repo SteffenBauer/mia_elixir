@@ -1,7 +1,8 @@
 defmodule MiaServer.Dice do
   defstruct die1: nil, die2: nil
 
-  def new(die1, die2), do: %MiaServer.Dice{die1: max(die1, die2), die2: min(die1, die2) }
+  def new(die1, die2) when die1 > die2, do: %MiaServer.Dice{die1: die1, die2: die2}
+  def new(die1, die2),                  do: %MiaServer.Dice{die1: die2, die2: die1}
 
   def equal?(dice1, dice2), do: dice1 == dice2
 
