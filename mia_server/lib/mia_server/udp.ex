@@ -8,12 +8,12 @@ defmodule MiaServer.UDP do
 
 ## API
 
-  def reply(ip, port, message) do
-    GenServer.cast(__MODULE__, {ip, port, message})
-  end
-
   def reply(ip, port, nil) do
     Logger.debug("No response to #{inspect ip}:#{inspect port}")
+  end
+
+  def reply(ip, port, message) do
+    GenServer.cast(__MODULE__, {ip, port, message})
   end
 
 ## GenServer Callbacks

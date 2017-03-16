@@ -5,7 +5,7 @@ config :mia_server,
   timeout: 200
 
 config :logger,
-  level: :debug
+  level: :warn
 
 config :logger, :console,
   format: "$date $time [$level] $levelpad$message\n",

@@ -39,4 +39,3 @@ defmodule MiaServer.DiceRoller do
   def seed, do: :rand.seed(:erlang.timestamp)
   def roll, do: MiaServer.Dice.new(:rand.uniform(6), :rand.uniform(6))
 end
-

@@ -16,6 +16,14 @@ defmodule MiaServer.Registry do
     GenServer.cast(__MODULE__, {ip, port})
   end
 
+  def get_players() do
+    GenServer.call(__MODULE__, :players)
+  end
+
+  def get_registered() do
+    GenServer.call(__MODULE__, :registered)
+  end
+
 ## GenServer Callbacks
 
   def init(:ok) do
@@ -27,10 +35,10 @@ defmodule MiaServer.Registry do
 
   def handle_cast({ip, port, name}, registry) do
     reply = cond do
-      String.length(name) > 20 -> "REJECTED"
-      String.contains?(name, [" ", ";", ","]) -> "REJECTED"
-      :ets.member(registry, ip) -> "ALREADY REGISTERED"
-      :ets.match(registry, {:"$1", :"_", :player, name}) != [] -> "REJECTED"
+      name |> String.length > 20 -> "REJECTED"
+      name |> String.contains?([" ", ";", ","]) -> "REJECTED"
+      registry |> :ets.member(ip) -> "ALREADY REGISTERED"
+      registry |> :ets.match({:"$1", :"_", :player, name}) != [] -> "REJECTED"
       true -> "REGISTERED"
     end
     if (reply =~ "REGISTERED"), do: :ets.insert(registry, {ip, port, :player, name})
@@ -40,12 +48,22 @@ defmodule MiaServer.Registry do
 
   def handle_cast({ip, port}, registry) do
     reply = cond do
-      :ets.member(registry, ip) -> "ALREADY REGISTERED"
+      registry |> :ets.member(ip) -> "ALREADY REGISTERED"
       true -> "REGISTERED"
     end
     :ets.insert(registry, {ip, port, :spectator})
     MiaServer.UDP.reply(ip, port, reply)
     {:noreply, registry}
+  end
+
+  def handle_call(:players, _from, registry) do
+    players = :ets.match(registry, {:"$1", :"$2", :player, :"$3"})
+    {:reply, players, registry}
+  end
+
+  def handle_call(:registered, _from, registry) do
+    registered = :ets.foldr(fn x,a -> a ++ [[elem(x,0), elem(x,1)]] end, [], registry)
+    {:reply, registered, registry}
   end
 
 end
