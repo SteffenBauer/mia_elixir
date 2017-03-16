@@ -91,6 +91,7 @@ defmodule MiaServer.ServerRegistrationTest do
     assert send_and_recv(socket1, port1, "REGISTER;player1") == "REGISTERED\n"
     assert send_and_recv(socket2, port2, "REGISTER_SPECTATOR") == "REGISTERED\n"
     assert send_and_recv(socket3, port3, "REGISTER_SPECTATOR") == "REGISTERED\n"
+    assert send_and_recv(socket3, port3, "REGISTER_SPECTATOR") == "ALREADY REGISTERED\n"
     assert send_and_recv(socket4, port4, "REGISTER;player1") == "REJECTED\n"
     assert send_and_recv(socket4, port4, "REGISTER;player2") == "REGISTERED\n"
     assert Registry.get_players()

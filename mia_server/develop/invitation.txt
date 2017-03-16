@@ -8,6 +8,10 @@ alt players join
 
   Client_A -> Server: JOIN;token_a
   Client_B -> Server: JOIN;token_b
+  Server -> Server: Timeout
+  Server -> Client_A: ROUND STARTED;round_number;list_of_players
+  Server -> Client_B: ROUND STARTED;round_number;list_of_players
+  Server -> Spectator: ROUND STARTED;round_number;list_of_players
 
 else No players join
 

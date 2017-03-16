@@ -2,7 +2,7 @@ use Mix.Config
 
 config :mia_server,
   port: 4080,
-  timeout: 200
+  timeout: 250
 
 config :logger,
   level: :warn
