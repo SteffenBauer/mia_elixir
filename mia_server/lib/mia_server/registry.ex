@@ -26,14 +26,25 @@ defmodule MiaServer.Registry do
   end
 
   def handle_cast({ip, port, name}, registry) do
-    :ets.insert(registry, {ip, port, :player, name})
-    MiaServer.UDP.reply(ip, port, "REGISTERED")
+    reply = cond do
+      String.length(name) > 20 -> "REJECTED"
+      String.contains?(name, [" ", ";", ","]) -> "REJECTED"
+      :ets.member(registry, ip) -> "ALREADY REGISTERED"
+      :ets.match(registry, {:"$1", :"_", :player, name}) != [] -> "REJECTED"
+      true -> "REGISTERED"
+    end
+    if (reply =~ "REGISTERED"), do: :ets.insert(registry, {ip, port, :player, name})
+    MiaServer.UDP.reply(ip, port, reply)
     {:noreply, registry}
   end
 
   def handle_cast({ip, port}, registry) do
+    reply = cond do
+      :ets.member(registry, ip) -> "ALREADY REGISTERED"
+      true -> "REGISTERED"
+    end
     :ets.insert(registry, {ip, port, :spectator})
-    MiaServer.UDP.reply(ip, port, "REGISTERED")
+    MiaServer.UDP.reply(ip, port, reply)
     {:noreply, registry}
   end
 

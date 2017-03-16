@@ -16,6 +16,7 @@ Falls name gültig und neu ist:
 * server->client: REGISTERED
 
 Falls die Registrierung unter demselben Namen zuletzt von derselben IP kam:
+* Server wechselt falls notwendig zu neuem Port um mit dieser IP zu kommunizieren
 * server->client: ALREADY REGISTERED
 
 Ansonsten:
