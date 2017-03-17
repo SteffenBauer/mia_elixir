@@ -27,6 +27,8 @@ defmodule MiaServer.InvitationTest do
     end
   end
 
+  @token ~r/ROUND STARTING;[0-9a-fA-F]{32}\n/
+
   test "No invitation when not enough registered players" do
     {socket, port} = open_udp_socket({127,0,0,1})
     assert :gen_udp.recv(socket, 0, @timeout) == {:error, :timeout}
@@ -37,11 +39,16 @@ defmodule MiaServer.InvitationTest do
   test "Invitation once two players are registered" do
     {socket1, port1} = open_udp_socket({127,0,0,1})
     {socket2, port2} = open_udp_socket({127,0,0,2})
+    {socket3, port3} = open_udp_socket({127,0,0,3})
     send_and_recv(socket1, port1, "REGISTER;player1")
+    send_and_recv(socket3, port3, "REGISTER_SPECTATOR")
+    assert :gen_udp.recv(socket1, 0, @timeout) == {:error, :timeout}
+    assert :gen_udp.recv(socket2, 0, @timeout) == {:error, :timeout}
+    assert :gen_udp.recv(socket3, 0, @timeout) == {:error, :timeout}
     send_and_recv(socket2, port2, "REGISTER;player2")
-    assert :gen_udp.recv(socket1, 0, @timeout) =~ "ROUND STARTING;"
-    assert :gen_udp.recv(socket2, 0, @timeout) =~ "ROUND STARTING;"
+    assert :gen_udp.recv(socket1, 0, @timeout) =~ @token
+    assert :gen_udp.recv(socket2, 0, @timeout) =~ @token
+    assert :gen_udp.recv(socket3, 0, @timeout) =~ "ROUND STARTING\n"
   end
-
 
 end

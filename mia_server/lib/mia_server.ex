@@ -6,6 +6,7 @@ defmodule MiaServer do
 
     children = [
       worker(MiaServer.Registry, []),
+      worker(MiaServer.Game, []),
       worker(MiaServer.UDP, [])
     ]
 
