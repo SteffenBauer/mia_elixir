@@ -1,4 +1,4 @@
-defmodule MiaServer.ServerRegistrationTest do
+defmodule MiaServer.RegistrationTest do
   use ExUnit.Case, async: false
   alias MiaServer.Registry
   require Logger

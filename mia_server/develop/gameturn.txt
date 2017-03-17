@@ -1,0 +1,52 @@
+@startuml
+
+Server -> Client: YOUR TURN;token_a
+
+== Player wants to roll ==
+
+Client -> Server: ROLL;token_a
+Server -> Clients:PLAYER ROLLS;name
+Server -> Client: ROLLED;dice;token_b
+alt Player announces
+	Client -> Server: ANNOUNCE;dice';token_b
+	Server -> Clients: ANNOUNCED;name;dice
+
+	alt Player announced higher
+		[<- Server: Next player turn
+	else player announced invalid throw
+		Server -> Clients: PLAYER LOST;name;ANNOUNCED LOSING DICE
+	else player announced valid MIA
+		Server -> Clients: PLAYER LOST;playerlist;MIA
+	else player announced invalid MIA
+		Server -> Clients: PLAYER LOST;name;LIED ABOUT MIA
+	end
+
+else Player makes invalid command
+	Client -> Server: <invalid command>
+	Server -> Clients: PLAYER LOST;name;INVALID TURN
+else Player timedout
+	Server -> Clients: PLAYER LOST;name;DID NOT ANNOUNCE
+end
+
+== Player wants to see ==
+Client -> Server: SEE;token_a
+Server -> Clients:PLAYER WANTS TO SEE;name
+Server -> Clients:ACTUAL DICE;dice
+alt Player was right about bluff
+	Server -> Clients:PLAYER LOST;name_2;CAUGHT BLUFFING
+else Throw was correctly announced
+	Server -> Clients:PLAYER LOST;name;SEE FAILED
+end
+
+== Player made invalid command ==
+Client -> Server: <invalid command>
+Server -> Clients: PLAYER LOST;name;INVALID TURN
+
+== Player timedout ==
+Server -> Clients: PLAYER LOST;name;DID NOT TAKE TURN
+
+== Round End ==
+Server -> Clients: SCORE;name1:score1,name2:score2,...
+[<- Server: Next round invitation
+
+@enduml
