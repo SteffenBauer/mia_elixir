@@ -38,10 +38,10 @@ defmodule MiaServer.Registry do
       name |> String.length > 20 -> "REJECTED"
       name |> String.contains?([" ", ";", ","]) -> "REJECTED"
       registry |> :ets.member(ip) -> "ALREADY REGISTERED"
-      registry |> :ets.match({:"$1", :"_", :player, name}) != [] -> "REJECTED"
+      registry |> :ets.match({:"$1", :"_", {:player, name}}) != [] -> "REJECTED"
       true -> "REGISTERED"
     end
-    if (reply =~ "REGISTERED"), do: :ets.insert(registry, {ip, port, :player, name})
+    if (reply =~ "REGISTERED"), do: :ets.insert(registry, {ip, port, {:player, name}})
     MiaServer.UDP.reply(ip, port, reply)
     {:noreply, registry}
   end
@@ -57,12 +57,12 @@ defmodule MiaServer.Registry do
   end
 
   def handle_call(:players, _from, registry) do
-    players = :ets.match(registry, {:"$1", :"$2", :player, :"$3"})
+    players = :ets.match(registry, {:"$1", :"$2", {:player, :"$3"}})
     {:reply, players, registry}
   end
 
   def handle_call(:registered, _from, registry) do
-    registered = :ets.foldr(fn x,a -> a ++ [[elem(x,0), elem(x,1)]] end, [], registry)
+    registered = :ets.match(registry, {:"$1", :"$2", :"_"})
     {:reply, registered, registry}
   end
 
