@@ -46,9 +46,12 @@ defmodule MiaServer.InvitationTest do
     assert :gen_udp.recv(socket2, 0, @timeout) == {:error, :timeout}
     assert :gen_udp.recv(socket3, 0, @timeout) == {:error, :timeout}
     send_and_recv(socket2, port2, "REGISTER;player2")
-    assert :gen_udp.recv(socket1, 0, @timeout) =~ @token
-    assert :gen_udp.recv(socket2, 0, @timeout) =~ @token
-    assert :gen_udp.recv(socket3, 0, @timeout) =~ "ROUND STARTING\n"
+    assert {:ok, {{127,0,0,1}, port1, invitation1}} = :gen_udp.recv(socket1, 0, @timeout)
+    assert {:ok, {{127,0,0,2}, port2, invitation2}} = :gen_udp.recv(socket2, 0, @timeout)
+    assert {:ok, {{127,0,0,3}, port3, invitation3}} = :gen_udp.recv(socket3, 0, @timeout)
+    assert invitation1 =~ @token
+    assert invitation2 =~ @token
+    assert invitation3 == "ROUND STARTING\n"
   end
 
 end

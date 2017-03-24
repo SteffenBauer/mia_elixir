@@ -51,7 +51,7 @@ defmodule MiaServer.Registry do
       registry |> :ets.member(ip) -> "ALREADY REGISTERED"
       true -> "REGISTERED"
     end
-    :ets.insert(registry, {ip, port, :spectator})
+    :ets.insert(registry, {ip, port, {:spectator, nil}})
     MiaServer.UDP.reply(ip, port, reply)
     {:noreply, registry}
   end
@@ -62,7 +62,7 @@ defmodule MiaServer.Registry do
   end
 
   def handle_call(:registered, _from, registry) do
-    registered = :ets.match(registry, {:"$1", :"$2", :"_"})
+    registered = :ets.match(registry, {:"$1", :"$2", {:"$3", :"_"}})
     {:reply, registered, registry}
   end
 

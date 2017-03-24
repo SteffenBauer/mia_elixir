@@ -33,7 +33,7 @@ defmodule MiaServer.RegistrationTest do
     {:ok, localport} = :inet.port(socket)
     assert send_and_recv(socket, port, "REGISTER;player") == "REGISTERED\n"
     assert Registry.get_players() == [[{127,0,0,1}, localport, "player"]]
-    assert Registry.get_registered() == [[{127,0,0,1}, localport]]
+    assert Registry.get_registered() == [[{127,0,0,1}, localport, :player]]
   end
 
   test "Register as spectator" do
@@ -41,7 +41,7 @@ defmodule MiaServer.RegistrationTest do
     {:ok, localport} = :inet.port(socket)
     assert send_and_recv(socket, port, "REGISTER_SPECTATOR") == "REGISTERED\n"
     assert Registry.get_players() == []
-    assert Registry.get_registered() == [[{127,0,0,1}, localport]]
+    assert Registry.get_registered() == [[{127,0,0,1}, localport, :spectator]]
   end
 
   test "Reject wrong names" do
@@ -60,7 +60,7 @@ defmodule MiaServer.RegistrationTest do
     assert send_and_recv(socket1, port1, "REGISTER;player") == "REGISTERED\n"
     assert send_and_recv(socket2, port2, "REGISTER;player") == "REJECTED\n"
     assert Registry.get_players() == [[{127,0,0,1}, localport1, "player"]]
-    assert Registry.get_registered() == [[{127,0,0,1}, localport1]]
+    assert Registry.get_registered() == [[{127,0,0,1}, localport1, :player]]
   end
 
   test "Re-Register from same IP" do
@@ -69,14 +69,14 @@ defmodule MiaServer.RegistrationTest do
     assert send_and_recv(socket, port, "REGISTER;player") == "REGISTERED\n"
     assert send_and_recv(socket, port, "REGISTER;player") == "ALREADY REGISTERED\n"
     assert Registry.get_players() == [[{127,0,0,1}, localport1, "player"]]
-    assert Registry.get_registered() == [[{127,0,0,1}, localport1]]
+    assert Registry.get_registered() == [[{127,0,0,1}, localport1, :player]]
     :gen_udp.close(socket)
     {socket, port} = open_udp_socket({127,0,0,1})
     {:ok, localport2} = :inet.port(socket)
     assert localport1 != localport2
     assert send_and_recv(socket, port, "REGISTER;player") == "ALREADY REGISTERED\n"
     assert Registry.get_players() == [[{127,0,0,1}, localport2, "player"]]
-    assert Registry.get_registered() == [[{127,0,0,1}, localport2]]
+    assert Registry.get_registered() == [[{127,0,0,1}, localport2, :player]]
   end
 
   test "Multiple registrations" do
@@ -98,10 +98,10 @@ defmodule MiaServer.RegistrationTest do
       |> Enum.sort() == [[{127,0,0,1}, localport1, "player1"],
                          [{127,0,0,4}, localport4, "player2"]]
     assert Registry.get_registered()
-      |> Enum.sort() == [[{127,0,0,1}, localport1],
-                         [{127,0,0,2}, localport2],
-                         [{127,0,0,3}, localport3],
-                         [{127,0,0,4}, localport4]]
+      |> Enum.sort() == [[{127,0,0,1}, localport1, :player],
+                         [{127,0,0,2}, localport2, :spectator],
+                         [{127,0,0,3}, localport3, :spectator],
+                         [{127,0,0,4}, localport4, :player]]
   end
 
 end
