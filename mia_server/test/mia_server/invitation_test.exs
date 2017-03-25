@@ -20,7 +20,7 @@ defmodule MiaServer.InvitationTest do
   end
 
   defp send_and_recv(socket, port, command) do
-    :ok = :gen_udp.send(socket, 'localhost', port, command)
+    :ok = :gen_udp.send(socket, '127.0.0.1', port, command)
     case :gen_udp.recv(socket, 0, @timeout) do
       {:ok, {_addr, _port, data}} -> data
       {:error, reason} -> {:error, reason}
@@ -46,9 +46,9 @@ defmodule MiaServer.InvitationTest do
     assert :gen_udp.recv(socket2, 0, @timeout) == {:error, :timeout}
     assert :gen_udp.recv(socket3, 0, @timeout) == {:error, :timeout}
     send_and_recv(socket2, port2, "REGISTER;player2")
-    assert {:ok, {{127,0,0,1}, ^port1, invitation1}} = :gen_udp.recv(socket1, 0, @timeout)
-    assert {:ok, {{127,0,0,2}, ^port2, invitation2}} = :gen_udp.recv(socket2, 0, @timeout)
-    assert {:ok, {{127,0,0,3}, ^port3, invitation3}} = :gen_udp.recv(socket3, 0, @timeout)
+    assert {:ok, {_ip, _port, invitation1}} = :gen_udp.recv(socket1, 0, @timeout)
+    assert {:ok, {_ip, _port, invitation2}} = :gen_udp.recv(socket2, 0, @timeout)
+    assert {:ok, {_ip, _port, invitation3}} = :gen_udp.recv(socket3, 0, @timeout)
     assert invitation1 =~ @token
     assert invitation2 =~ @token
     assert invitation3 == "ROUND STARTING\n"
@@ -59,10 +59,10 @@ defmodule MiaServer.InvitationTest do
     {socket2, port2} = open_udp_socket({127,0,0,2})
     send_and_recv(socket1, port1, "REGISTER;player1")
     send_and_recv(socket2, port2, "REGISTER;player2")
-    assert {:ok, {{127,0,0,1}, ^port1, _invitation1}} = :gen_udp.recv(socket1, 0, @timeout)
-    assert {:ok, {{127,0,0,2}, ^port2, _invitation2}} = :gen_udp.recv(socket2, 0, @timeout)
-    assert {:ok, {{127,0,0,1}, ^port1, "ROUND CANCELED;NO PLAYERS\n"}} = :gen_udp.recv(socket1, 0, @timeout)
-    assert {:ok, {{127,0,0,2}, ^port2, "ROUND CANCELED;NO PLAYERS\n"}} = :gen_udp.recv(socket2, 0, @timeout)
+    assert {:ok, {_ip, _port, _invitation1}} = :gen_udp.recv(socket1, 0, @timeout)
+    assert {:ok, {_ip, _port, _invitation2}} = :gen_udp.recv(socket2, 0, @timeout)
+    assert {:ok, {_ip, _port, "ROUND CANCELED;NO PLAYERS\n"}} = :gen_udp.recv(socket1, 0, @timeout)
+    assert {:ok, {_ip, _port, "ROUND CANCELED;NO PLAYERS\n"}} = :gen_udp.recv(socket2, 0, @timeout)
   end
 
   test "Game aborted on only one participant" do
@@ -70,12 +70,12 @@ defmodule MiaServer.InvitationTest do
     {socket2, port2} = open_udp_socket({127,0,0,2})
     send_and_recv(socket1, port1, "REGISTER;player1")
     send_and_recv(socket2, port2, "REGISTER;player2")
-    assert {:ok, {{127,0,0,1}, ^port1, invitation1}} = :gen_udp.recv(socket1, 0, @timeout)
-    assert {:ok, {{127,0,0,2}, ^port2, _invitation2}} = :gen_udp.recv(socket2, 0, @timeout)
+    assert {:ok, {_ip, _port, invitation1}} = :gen_udp.recv(socket1, 0, @timeout)
+    assert {:ok, {_ip, _port, _invitation2}} = :gen_udp.recv(socket2, 0, @timeout)
     assert [^invitation1, mytoken1] = Regex.run(@token, invitation1)
     :gen_udp.send(socket1, 'localhost', port1, "JOIN;"<>mytoken1)
-    assert {:ok, {{127,0,0,1}, ^port1, "ROUND CANCELED;ONLY ONE PLAYER\n"}} = :gen_udp.recv(socket1, 0, @timeout)
-    assert {:ok, {{127,0,0,2}, ^port2, "ROUND CANCELED;ONLY ONE PLAYER\n"}} = :gen_udp.recv(socket2, 0, @timeout)
+    assert {:ok, {_ip, _port, "ROUND CANCELED;ONLY ONE PLAYER\n"}} = :gen_udp.recv(socket1, 0, @timeout)
+    assert {:ok, {_ip, _port, "ROUND CANCELED;ONLY ONE PLAYER\n"}} = :gen_udp.recv(socket2, 0, @timeout)
   end
 
   test "Game starts with two participants" do
@@ -83,14 +83,14 @@ defmodule MiaServer.InvitationTest do
     {socket2, port2} = open_udp_socket({127,0,0,2})
     send_and_recv(socket1, port1, "REGISTER;player1")
     send_and_recv(socket2, port2, "REGISTER;player2")
-    assert {:ok, {{127,0,0,1}, ^port1, invitation1}} = :gen_udp.recv(socket1, 0, @timeout)
-    assert {:ok, {{127,0,0,2}, ^port2, invitation2}} = :gen_udp.recv(socket2, 0, @timeout)
+    assert {:ok, {_ip, _port, invitation1}} = :gen_udp.recv(socket1, 0, @timeout)
+    assert {:ok, {_ip, _port, invitation2}} = :gen_udp.recv(socket2, 0, @timeout)
     assert [^invitation1, mytoken1] = Regex.run(@token, invitation1)
     assert [^invitation2, mytoken2] = Regex.run(@token, invitation2)
     :gen_udp.send(socket1, 'localhost', port1, "JOIN;"<>mytoken1)
     :gen_udp.send(socket2, 'localhost', port2, "JOIN;"<>mytoken2)
-    assert {:ok, {{127,0,0,1}, ^port1, "ROUND STARTED;1\n"}} = :gen_udp.recv(socket1, 0, @timeout)
-    assert {:ok, {{127,0,0,2}, ^port2, "ROUND STARTED;1\n"}} = :gen_udp.recv(socket2, 0, @timeout)
+    assert {:ok, {_ip, _port, "ROUND STARTED;1\n"}} = :gen_udp.recv(socket1, 0, @timeout)
+    assert {:ok, {_ip, _port, "ROUND STARTED;1\n"}} = :gen_udp.recv(socket2, 0, @timeout)
   end
 
 end
