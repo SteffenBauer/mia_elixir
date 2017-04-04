@@ -55,7 +55,8 @@ defmodule MiaServer.Game do
     reply = case length(joined_players) do
       0 -> "ROUND CANCELED;NO PLAYERS"
       1 -> "ROUND CANCELED;ONLY ONE PLAYER"
-      _ -> "ROUND STARTED;#{roundno}"
+      _ -> playerlist = generate_playerlist(joined_players)
+           "ROUND STARTED;#{roundno};#{playerlist}"
     end
     MiaServer.Registry.get_registered()
       |> Enum.each(fn [ip, port, _role] -> MiaServer.UDP.reply(ip, port, reply) end)
@@ -85,6 +86,14 @@ defmodule MiaServer.Game do
   defp uuid() do
     for _ <- 1..32 do :rand.uniform(16)-1 |> Integer.to_string(16) end
     |> Enum.join
+  end
+
+  defp generate_playerlist(players) do
+    MiaServer.Registry.get_players()
+      |> Enum.filter(fn [ip, port, _name] -> [ip, port] in players end)
+      |> Enum.shuffle
+      |> Enum.map(fn [_ip, _port, name] -> name end)
+      |> Enum.join(",")
   end
 
 end
