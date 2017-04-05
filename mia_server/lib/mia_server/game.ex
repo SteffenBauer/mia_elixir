@@ -18,40 +18,36 @@ defmodule MiaServer.Game do
 
   def init(:ok) do
     Logger.info "Starting MIA game machine"
-    parttab = :ets.new(:"#{__MODULE__}_notify", [:set, :private])
     Process.send_after(self(), :check_registry, @timeout)
-    {:ok, {:waiting, parttab, 1}}
+    {:ok, {:waiting, 1}}
   end
 
-  def handle_cast({:join, ip, port, token}, {:wait_for_joins, parttab, roundno}) do
-    if :ets.match(parttab, {ip, port, token}) != [] do
-      :ets.insert(parttab, {ip, port, :joined})
-    end
-    {:noreply, {:wait_for_joins, parttab, roundno}}
+  def handle_cast({:join, ip, port, token}, {:wait_for_joins, roundno}) do
+    MiaServer.Playerlist.join_player(ip, port, token)
+    {:noreply, {:wait_for_joins, roundno}}
   end
-  def handle_cast({:join, _ip, _port, _token}, {state, parttab, roundno}) do
-    {:noreply, {state, parttab, roundno}}
+  def handle_cast({:join, _ip, _port, _token}, {state, roundno}) do
+    {:noreply, {state, roundno}}
   end
 
-  def handle_info(:check_registry, {:waiting, parttab, roundno}) do
+  def handle_info(:check_registry, {:waiting, roundno}) do
     registered_participants = MiaServer.Registry.get_registered()
     registered_players = registered_participants
       |> Enum.filter(fn [_, _, role] -> role == :player end)
-      |> length
     state = cond do
-      registered_players > 1 ->
-        send_invitations(registered_participants, parttab)
+      length(registered_players) > 1 ->
+        send_invitations(registered_participants)
         Process.send_after(self(), :check_joins, @timeout)
         :wait_for_joins
       true ->
         Process.send_after(self(), :check_registry, @timeout)
         :waiting
     end
-    {:noreply, {state, parttab, roundno}}
+    {:noreply, {state, roundno}}
   end
 
-  def handle_info(:check_joins, {:wait_for_joins, parttab, roundno}) do
-    joined_players = :ets.match(parttab, {:"$1", :"$2", :joined})
+  def handle_info(:check_joins, {:wait_for_joins, roundno}) do
+    joined_players = MiaServer.Playerlist.get_joined_players()
     reply = case length(joined_players) do
       0 -> "ROUND CANCELED;NO PLAYERS"
       1 -> "ROUND CANCELED;ONLY ONE PLAYER"
@@ -62,24 +58,24 @@ defmodule MiaServer.Game do
       |> Enum.each(fn [ip, port, _role] -> MiaServer.UDP.reply(ip, port, reply) end)
     Process.send_after(self(), :check_registry, @timeout)
     state = :waiting
-    {:noreply, {state, parttab, roundno}}
+    {:noreply, {state, roundno}}
   end
 
 ## Private helper functions
 
-  defp send_invitations(participants, parttab) do
-    :ets.delete_all_objects(parttab)
+  defp send_invitations(participants) do
+    MiaServer.Playerlist.flush()
     participants
-      |> Enum.map(fn [ip, port, role] -> generate_invitation(ip, port, role, parttab) end)
+      |> Enum.map(fn [ip, port, role] -> generate_invitation(ip, port, role) end)
       |> Enum.each(fn {ip, port, msg} -> MiaServer.UDP.reply(ip, port, msg) end)
   end
 
-  defp generate_invitation(ip, port, :player, parttab) do
+  defp generate_invitation(ip, port, :player) do
     token = uuid()
-    :ets.insert(parttab, {ip, port, token})
+    MiaServer.Playerlist.add_invited_player(ip, port, token)
     {ip, port, "ROUND STARTING;"<>token}
   end
-  defp generate_invitation(ip, port, :spectator, _parttab) do
+  defp generate_invitation(ip, port, :spectator) do
     {ip, port, "ROUND STARTING"}
   end
 
