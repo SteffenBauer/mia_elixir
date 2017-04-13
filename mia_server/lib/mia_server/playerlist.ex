@@ -11,7 +11,7 @@ defmodule MiaServer.Playerlist do
   def flush() do
     GenServer.cast(__MODULE__, :flush)
   end
-  
+
   def add_invited_player(ip, port, token) do
     GenServer.cast(__MODULE__, {:add, ip, port, token})
   end
@@ -22,6 +22,10 @@ defmodule MiaServer.Playerlist do
 
   def get_joined_players() do
     GenServer.call(__MODULE__, :get_joined)
+  end
+
+  def add_participating_player(num, ip, port, name) do
+    GenServer.cast(__MODULE__, {num, :playing, ip, port, name})
   end
 
 ## GenServer Callbacks
@@ -47,6 +51,11 @@ defmodule MiaServer.Playerlist do
     if :ets.match(players, {ip, port, token}) != [] do
       :ets.insert(players, {ip, port, :joined})
     end
+    {:noreply, players}
+  end
+
+  def handle_cast({num, :playing, ip, port, name}, players) do
+    :ets.insert(players, {num, ip, port, name})
     {:noreply, players}
   end
 

@@ -48,14 +48,22 @@ defmodule MiaServer.Game do
 
   def handle_info(:check_joins, {:wait_for_joins, roundno}) do
     joined_players = MiaServer.Playerlist.get_joined_players()
-    reply = case length(joined_players) do
-      0 -> "ROUND CANCELED;NO PLAYERS"
-      1 -> "ROUND CANCELED;ONLY ONE PLAYER"
+    {reply, fyt} = case length(joined_players) do
+      0 -> {"ROUND CANCELED;NO PLAYERS", nil}
+      1 -> {"ROUND CANCELED;ONLY ONE PLAYER", nil}
       _ -> playerlist = generate_playerlist(joined_players)
-           "ROUND STARTED;#{roundno};#{playerlist}"
+           [ip, port, _name] = playerlist |> hd
+           playerlist = playerlist
+             |> store_playerlist()
+             |> playerstring()
+           {"ROUND STARTED;#{roundno};#{playerlist}", {ip, port}}
     end
     MiaServer.Registry.get_registered()
       |> Enum.each(fn [ip, port, _role] -> MiaServer.UDP.reply(ip, port, reply) end)
+    if fyt do
+      {ip, port} = fyt
+      MiaServer.UDP.reply(ip, port, "YOUR TURN;#{uuid()}")
+    end
     Process.send_after(self(), :check_registry, @timeout)
     state = :waiting
     {:noreply, {state, roundno}}
@@ -80,7 +88,10 @@ defmodule MiaServer.Game do
   end
 
   defp uuid() do
-    for _ <- 1..32 do :rand.uniform(16)-1 |> Integer.to_string(16) end
+    for _ <- 1..32 do
+      :rand.uniform(16)-1
+      |> Integer.to_string(16)
+    end
     |> Enum.join
   end
 
@@ -88,6 +99,19 @@ defmodule MiaServer.Game do
     MiaServer.Registry.get_players()
       |> Enum.filter(fn [ip, port, _name] -> [ip, port] in players end)
       |> Enum.shuffle
+  end
+
+  defp store_playerlist(playerlist) do
+    MiaServer.Playerlist.flush()
+    playerlist
+      |> Enum.reduce(0, fn [ip, port, name], num ->
+        MiaServer.Playerlist.add_participating_player(num, ip, port, name)
+        num+1 end)
+    playerlist
+  end
+
+  defp playerstring(playerlist) do
+    playerlist
       |> Enum.map(fn [_ip, _port, name] -> name end)
       |> Enum.join(",")
   end
