@@ -10,8 +10,8 @@ defmodule MiaServer.Parser do
         MiaServer.Game.register_join(ip, port, token)
       "ANNOUNCE;" <> <<_dice::binary-size(3)>> <> ";" <> _token ->
         nil
-      "ROLL;" <> _token ->
-        nil
+      "ROLL;" <> token ->
+        MiaServer.Game.do_roll(token)
       "SEE;" <> _token ->
         nil
       _ ->

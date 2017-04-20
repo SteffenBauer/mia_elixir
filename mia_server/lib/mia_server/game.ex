@@ -14,23 +14,31 @@ defmodule MiaServer.Game do
     GenServer.cast(__MODULE__, {:join, ip, port, token})
   end
 
+  def do_roll(token) do
+    GenServer.cast(__MODULE__, {:player_rolls, token})
+  end
+
 ## GenServer Callbacks
 
   def init(:ok) do
     Logger.info "Starting MIA game machine"
     Process.send_after(self(), :check_registry, @timeout)
-    {:ok, {:waiting, 1}}
+    {:ok, {:waiting, 0, 1}}
   end
 
-  def handle_cast({:join, ip, port, token}, {:wait_for_joins, roundno}) do
+  def handle_cast({:join, ip, port, token}, {:wait_for_joins, playerno, roundno}) do
     MiaServer.Playerlist.join_player(ip, port, token)
-    {:noreply, {:wait_for_joins, roundno}}
+    {:noreply, {:wait_for_joins, playerno, roundno}}
   end
-  def handle_cast({:join, _ip, _port, _token}, {state, roundno}) do
-    {:noreply, {state, roundno}}
+  def handle_cast({:join, _ip, _port, _token}, {state, playerno, roundno}) do
+    {:noreply, {state, playerno, roundno}}
   end
 
-  def handle_info(:check_registry, {:waiting, roundno}) do
+  def handle_cast({:player_rolls, token}, {:round, {playerno, token}, roundno}) do
+    {:noreply, {:round, {playerno, :rolls}, roundno}}
+  end
+
+  def handle_info(:check_registry, {:waiting, _, roundno}) do
     registered_participants = MiaServer.Registry.get_registered()
     registered_players = registered_participants
       |> Enum.filter(fn [_, _, role] -> role == :player end)
@@ -43,30 +51,43 @@ defmodule MiaServer.Game do
         Process.send_after(self(), :check_registry, @timeout)
         :waiting
     end
-    {:noreply, {state, roundno}}
+    {:noreply, {state, 0, roundno}}
   end
 
-  def handle_info(:check_joins, {:wait_for_joins, roundno}) do
+  def handle_info(:check_joins, {:wait_for_joins, _, roundno}) do
     joined_players = MiaServer.Playerlist.get_joined_players()
-    {reply, fyt} = case length(joined_players) do
-      0 -> {"ROUND CANCELED;NO PLAYERS", nil}
-      1 -> {"ROUND CANCELED;ONLY ONE PLAYER", nil}
+    {reply, state, next} = case length(joined_players) do
+      0 -> {"ROUND CANCELED;NO PLAYERS", :waiting, :check_registry}
+      1 -> {"ROUND CANCELED;ONLY ONE PLAYER", :waiting, :check_registry}
       _ -> playerlist = generate_playerlist(joined_players)
-           [ip, port, _name] = playerlist |> hd
-           playerlist = playerlist
              |> store_playerlist()
              |> playerstring()
-           {"ROUND STARTED;#{roundno};#{playerlist}", {ip, port}}
+           {"ROUND STARTED;#{roundno};#{playerlist}", :round, :send_your_turn}
     end
     MiaServer.Registry.get_registered()
       |> Enum.each(fn [ip, port, _role] -> MiaServer.UDP.reply(ip, port, reply) end)
-    if fyt do
-      {ip, port} = fyt
-      MiaServer.UDP.reply(ip, port, "YOUR TURN;#{uuid()}")
-    end
-    Process.send_after(self(), :check_registry, @timeout)
-    state = :waiting
-    {:noreply, {state, roundno}}
+    Process.send_after(self(), next, @timeout)
+    {:noreply, {state, 0, roundno}}
+  end
+
+  def handle_info(:send_your_turn, {:round, playerno, roundno}) do
+    {ip, port, name} = MiaServer.Playerlist.get_participating_player(playerno)
+    token = uuid()
+    MiaServer.UDP.reply(ip, port, "YOUR TURN;#{token}")
+    Process.send_after(self(), :check_action, @timeout)
+    {:noreply, {:round, {playerno, token}, roundno}}
+  end
+
+  def handle_info(:check_action, {:round, {playerno, :rolls}, roundno}) do
+    {ip, port, _name} = MiaServer.Playerlist.get_participating_player(playerno)
+    dice = MiaServer.DiceRoller.roll()
+    token = uuid()
+    reply = "ROLLED;#{dice};#{token}"
+    MiaServer.UDP.reply(ip, port, reply)
+    {:noreply, {:round, playerno, roundno}}
+  end
+  def handle_info(:check_action, {:round, {playerno, _}, roundno}) do
+    {:noreply, {:round, playerno, roundno}}
   end
 
 ## Private helper functions
