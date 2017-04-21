@@ -61,8 +61,7 @@ defmodule MiaServer.Game do
              |> playerstring()
            {"ROUND STARTED;#{state.round};#{playerlist}", %{state | :state => :round, :playerno => 0}, :send_your_turn}
     end
-    MiaServer.Registry.get_registered()
-      |> Enum.each(fn [ip, port, _role] -> MiaServer.UDP.reply(ip, port, reply) end)
+    broadcast_message(reply)
     Process.send_after(self(), next, @timeout)
     {:noreply, state}
   end
@@ -76,7 +75,8 @@ defmodule MiaServer.Game do
   end
 
   def handle_info(:check_action, %{:state => :round, :action => :rolls} = state) do
-    {ip, port, _name} = MiaServer.Playerlist.get_participating_player(state.playerno)
+    {ip, port, name} = MiaServer.Playerlist.get_participating_player(state.playerno)
+    broadcast_message("PLAYER ROLLS;#{name}")
     dice = MiaServer.DiceRoller.roll()
     token = uuid()
     reply = "ROLLED;#{dice};#{token}"
@@ -85,6 +85,11 @@ defmodule MiaServer.Game do
   end
 
 ## Private helper functions
+
+  defp broadcast_message(msg) do
+    MiaServer.Registry.get_registered()
+      |> Enum.each(fn [ip, port, _role] -> MiaServer.UDP.reply(ip, port, msg) end)
+  end
 
   defp send_invitations(participants) do
     MiaServer.Playerlist.flush()
