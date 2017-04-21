@@ -23,26 +23,23 @@ defmodule MiaServer.Game do
   def init(:ok) do
     Logger.info "Starting MIA game machine"
     Process.send_after(self(), :check_registry, @timeout)
-    {:ok, {:waiting, 0, 1}}
+    {:ok, %{:state => :waiting, :round => 1, :playerno => 0, :token => nil, :action => nil}}
   end
 
-  def handle_cast({:join, ip, port, token}, {:wait_for_joins, playerno, roundno}) do
+  def handle_cast({:join, ip, port, token}, %{:state => :wait_for_joins} = state) do
     MiaServer.Playerlist.join_player(ip, port, token)
-    {:noreply, {:wait_for_joins, playerno, roundno}}
-  end
-  def handle_cast({:join, _ip, _port, _token}, {state, playerno, roundno}) do
-    {:noreply, {state, playerno, roundno}}
+    {:noreply, state}
   end
 
-  def handle_cast({:player_rolls, token}, {:round, {playerno, token}, roundno}) do
-    {:noreply, {:round, {playerno, :rolls}, roundno}}
+  def handle_cast({:player_rolls, token}, %{:state => :round, :token => token} = state) do
+    {:noreply, %{state | :action => :rolls}}
   end
 
-  def handle_info(:check_registry, {:waiting, _, roundno}) do
+  def handle_info(:check_registry, %{:state => :waiting} = state) do
     registered_participants = MiaServer.Registry.get_registered()
     registered_players = registered_participants
       |> Enum.filter(fn [_, _, role] -> role == :player end)
-    state = cond do
+    nextstate = cond do
       length(registered_players) > 1 ->
         send_invitations(registered_participants)
         Process.send_after(self(), :check_joins, @timeout)
@@ -51,43 +48,40 @@ defmodule MiaServer.Game do
         Process.send_after(self(), :check_registry, @timeout)
         :waiting
     end
-    {:noreply, {state, 0, roundno}}
+    {:noreply, %{state | :state => nextstate}}
   end
 
-  def handle_info(:check_joins, {:wait_for_joins, _, roundno}) do
+  def handle_info(:check_joins, %{:state => :wait_for_joins} = state) do
     joined_players = MiaServer.Playerlist.get_joined_players()
     {reply, state, next} = case length(joined_players) do
-      0 -> {"ROUND CANCELED;NO PLAYERS", :waiting, :check_registry}
-      1 -> {"ROUND CANCELED;ONLY ONE PLAYER", :waiting, :check_registry}
+      0 -> {"ROUND CANCELED;NO PLAYERS", %{state | :state => :waiting}, :check_registry}
+      1 -> {"ROUND CANCELED;ONLY ONE PLAYER", %{state | :state => :waiting}, :check_registry}
       _ -> playerlist = generate_playerlist(joined_players)
              |> store_playerlist()
              |> playerstring()
-           {"ROUND STARTED;#{roundno};#{playerlist}", :round, :send_your_turn}
+           {"ROUND STARTED;#{state.round};#{playerlist}", %{state | :state => :round, :playerno => 0}, :send_your_turn}
     end
     MiaServer.Registry.get_registered()
       |> Enum.each(fn [ip, port, _role] -> MiaServer.UDP.reply(ip, port, reply) end)
     Process.send_after(self(), next, @timeout)
-    {:noreply, {state, 0, roundno}}
+    {:noreply, state}
   end
 
-  def handle_info(:send_your_turn, {:round, playerno, roundno}) do
-    {ip, port, name} = MiaServer.Playerlist.get_participating_player(playerno)
+  def handle_info(:send_your_turn, %{:state => :round} = state) do
+    {ip, port, _name} = MiaServer.Playerlist.get_participating_player(state.playerno)
     token = uuid()
     MiaServer.UDP.reply(ip, port, "YOUR TURN;#{token}")
     Process.send_after(self(), :check_action, @timeout)
-    {:noreply, {:round, {playerno, token}, roundno}}
+    {:noreply, %{state | :token => token}}
   end
 
-  def handle_info(:check_action, {:round, {playerno, :rolls}, roundno}) do
-    {ip, port, _name} = MiaServer.Playerlist.get_participating_player(playerno)
+  def handle_info(:check_action, %{:state => :round, :action => :rolls} = state) do
+    {ip, port, _name} = MiaServer.Playerlist.get_participating_player(state.playerno)
     dice = MiaServer.DiceRoller.roll()
     token = uuid()
     reply = "ROLLED;#{dice};#{token}"
     MiaServer.UDP.reply(ip, port, reply)
-    {:noreply, {:round, playerno, roundno}}
-  end
-  def handle_info(:check_action, {:round, {playerno, _}, roundno}) do
-    {:noreply, {:round, playerno, roundno}}
+    {:noreply, %{state | :token => token}}
   end
 
 ## Private helper functions
