@@ -146,11 +146,10 @@ defmodule MiaServer.Game do
   end
 
   defp update_score(playerno, :lost) do
-    {_ip, _port, name} = MiaServer.Playerlist.get_participating_player(playerno)
-    MiaServer.Registry.get_players()
-      |> Enum.map(fn [_i, _p, name, _s] -> name end)
-      |> Enum.reject(fn n -> name == n end)
-      |> Enum.each(fn name -> MiaServer.Registry.increase_score(name) end)
+    for pn <- 0..MiaServer.Playerlist.get_participating_number()-1, pn != playerno do
+      {_i, _p, name} = MiaServer.Playerlist.get_participating_player(pn)
+      MiaServer.Registry.increase_score(name)
+    end
   end
 
   defp update_score(playerno, :won) do

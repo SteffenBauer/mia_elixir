@@ -32,6 +32,10 @@ defmodule MiaServer.Playerlist do
     GenServer.call(__MODULE__, {:get_player, num})
   end
 
+  def get_participating_number() do
+    GenServer.call(__MODULE__, :get_num)
+  end
+
 ## GenServer Callbacks
 
   def init(:ok) do
@@ -71,6 +75,11 @@ defmodule MiaServer.Playerlist do
   def handle_call({:get_player, num}, _from, players) do
     [{^num, ip, port, name} | _] = :ets.lookup(players, num)
     {:reply, {ip, port, name}, players}
+  end
+
+  def handle_call(:get_num, _from, players) do
+    num = :ets.info(players, :size)
+    {:reply, num, players}
   end
 
 end
