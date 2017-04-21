@@ -71,7 +71,7 @@ defmodule MiaServer.Game do
     token = uuid()
     MiaServer.UDP.reply(ip, port, "YOUR TURN;#{token}")
     Process.send_after(self(), :check_action, @timeout)
-    {:noreply, %{state | :token => token}}
+    {:noreply, %{state | :token => token, :action => nil}}
   end
 
   def handle_info(:check_action, %{:state => :round, :action => :rolls} = state) do
@@ -82,6 +82,15 @@ defmodule MiaServer.Game do
     reply = "ROLLED;#{dice};#{token}"
     MiaServer.UDP.reply(ip, port, reply)
     {:noreply, %{state | :token => token}}
+  end
+
+  def handle_info(:check_action, %{:state => :round, :action => nil} = state) do
+    {_ip, _port, name} = MiaServer.Playerlist.get_participating_player(state.playerno)
+    broadcast_message("PLAYER LOST;#{name};DID NOT TAKE TURN")
+    update_score(state.playerno, :lost)
+    get_scoremsg() |> broadcast_message()
+    Process.send_after(self(), :check_registry, @timeout)
+    {:noreply, %{state | :state => :waiting, :round => state.round+1, :playerno => 0, :token => nil, :action => nil}}
   end
 
 ## Private helper functions
@@ -117,14 +126,14 @@ defmodule MiaServer.Game do
 
   defp generate_playerlist(players) do
     MiaServer.Registry.get_players()
-      |> Enum.filter(fn [ip, port, _name] -> [ip, port] in players end)
+      |> Enum.filter(fn [ip, port, _name, _score] -> [ip, port] in players end)
       |> Enum.shuffle
   end
 
   defp store_playerlist(playerlist) do
     MiaServer.Playerlist.flush()
     playerlist
-      |> Enum.reduce(0, fn [ip, port, name], num ->
+      |> Enum.reduce(0, fn [ip, port, name, _score], num ->
         MiaServer.Playerlist.add_participating_player(num, ip, port, name)
         num+1 end)
     playerlist
@@ -132,8 +141,28 @@ defmodule MiaServer.Game do
 
   defp playerstring(playerlist) do
     playerlist
-      |> Enum.map(fn [_ip, _port, name] -> name end)
+      |> Enum.map(fn [_ip, _port, name, _score] -> name end)
       |> Enum.join(",")
   end
 
+  defp update_score(playerno, :lost) do
+    {_ip, _port, name} = MiaServer.Playerlist.get_participating_player(playerno)
+    MiaServer.Registry.get_players()
+      |> Enum.map(fn [_i, _p, name, _s] -> name end)
+      |> Enum.reject(fn n -> name == n end)
+      |> Enum.each(fn name -> MiaServer.Registry.increase_score(name) end)
+  end
+
+  defp update_score(playerno, :won) do
+    {_ip, _port, name} = MiaServer.Playerlist.get_participating_player(playerno)
+    MiaServer.Registry.increase_score(name)
+  end
+
+  defp get_scoremsg() do
+    scores = MiaServer.Registry.get_players()
+      |> Enum.map(fn [_ip, _port, name, score] -> "#{name}:#{score}" end)
+      |> Enum.sort()
+      |> Enum.join(",")
+    "SCORE;" <> scores
+  end
 end

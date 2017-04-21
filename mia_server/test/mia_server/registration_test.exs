@@ -32,7 +32,7 @@ defmodule MiaServer.RegistrationTest do
     {socket, port} = open_udp_socket({127,0,0,1})
     {:ok, localport} = :inet.port(socket)
     assert send_and_recv(socket, port, "REGISTER;player") == "REGISTERED\n"
-    assert Registry.get_players() == [[{127,0,0,1}, localport, "player"]]
+    assert Registry.get_players() == [[{127,0,0,1}, localport, "player", 0]]
     assert Registry.get_registered() == [[{127,0,0,1}, localport, :player]]
   end
 
@@ -59,7 +59,7 @@ defmodule MiaServer.RegistrationTest do
     {socket2, port2} = open_udp_socket({127,0,0,2})
     assert send_and_recv(socket1, port1, "REGISTER;player") == "REGISTERED\n"
     assert send_and_recv(socket2, port2, "REGISTER;player") == "REJECTED\n"
-    assert Registry.get_players() == [[{127,0,0,1}, localport1, "player"]]
+    assert Registry.get_players() == [[{127,0,0,1}, localport1, "player", 0]]
     assert Registry.get_registered() == [[{127,0,0,1}, localport1, :player]]
   end
 
@@ -68,14 +68,14 @@ defmodule MiaServer.RegistrationTest do
     {:ok, localport1} = :inet.port(socket)
     assert send_and_recv(socket, port, "REGISTER;player") == "REGISTERED\n"
     assert send_and_recv(socket, port, "REGISTER;player") == "ALREADY REGISTERED\n"
-    assert Registry.get_players() == [[{127,0,0,1}, localport1, "player"]]
+    assert Registry.get_players() == [[{127,0,0,1}, localport1, "player", 0]]
     assert Registry.get_registered() == [[{127,0,0,1}, localport1, :player]]
     :gen_udp.close(socket)
     {socket, port} = open_udp_socket({127,0,0,1})
     {:ok, localport2} = :inet.port(socket)
     assert localport1 != localport2
     assert send_and_recv(socket, port, "REGISTER;player") == "ALREADY REGISTERED\n"
-    assert Registry.get_players() == [[{127,0,0,1}, localport2, "player"]]
+    assert Registry.get_players() == [[{127,0,0,1}, localport2, "player", 0]]
     assert Registry.get_registered() == [[{127,0,0,1}, localport2, :player]]
   end
 
@@ -95,8 +95,8 @@ defmodule MiaServer.RegistrationTest do
     assert send_and_recv(socket4, port4, "REGISTER;player1") == "REJECTED\n"
     assert send_and_recv(socket4, port4, "REGISTER;player2") == "REGISTERED\n"
     assert Registry.get_players()
-      |> Enum.sort() == [[{127,0,0,1}, localport1, "player1"],
-                         [{127,0,0,4}, localport4, "player2"]]
+      |> Enum.sort() == [[{127,0,0,1}, localport1, "player1", 0],
+                         [{127,0,0,4}, localport4, "player2", 0]]
     assert Registry.get_registered()
       |> Enum.sort() == [[{127,0,0,1}, localport1, :player],
                          [{127,0,0,2}, localport2, :spectator],

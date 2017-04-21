@@ -69,14 +69,37 @@ defmodule MiaServer.GameplayTest do
     {:ok, {_ip, _port, msg}} = :gen_udp.recv(socket, 0, @timeout)
     [_, token] = Regex.run(~r/YOUR TURN;([0-9a-fA-F]{32})\n/, msg)
     :gen_udp.send(socket, 'localhost', port, "ROLL;#{token}")
-    {:ok, {_ip, _port, msg1}} = :gen_udp.recv(s1, 0, @timeout)
-    {:ok, {_ip, _port, msg2}} = :gen_udp.recv(s2, 0, @timeout)
-    {:ok, {_ip, _port, msg3}} = :gen_udp.recv(s3, 0, @timeout)
-    assert msg1 == "PLAYER ROLLS;#{player}\n"
-    assert msg2 == "PLAYER ROLLS;#{player}\n"
-    assert msg3 == "PLAYER ROLLS;#{player}\n"
+    for s <- [s1, s2, s3] do
+      {:ok, {_ip, _port, msg}} = :gen_udp.recv(s, 0, @timeout)
+      assert msg == "PLAYER ROLLS;#{player}\n"
+    end
     {:ok, {_ip, _port, msg}} = :gen_udp.recv(socket, 0, @timeout)
     assert msg =~ ~r/ROLLED;[1-6],[1-6];[0-9a-fA-F]{32}/
+  end
+
+  test "First player does nothing" do
+    {start, {s1, p1}, {s2, p2}, {s3, _p3}} = setup_game()
+    {{{socket, _port}, _}, player} = extract_player_seq(start, {s1, p1}, {s2, p2})
+    :gen_udp.recv(socket, 0, @timeout)
+    Process.sleep(@timeout)
+    for s <- [s1, s2, s3] do
+      {:ok, {_ip, _port, msg}} = :gen_udp.recv(s, 0, @timeout)
+      assert msg == "PLAYER LOST;#{player};DID NOT TAKE TURN\n"
+    end
+    scoremsg = case player do
+      "player1" -> "SCORE;player1:0,player2:1\n"
+      "player2" -> "SCORE;player1:1,player2:0\n"
+    end
+    for s <- [s1, s2, s3] do
+      {:ok, {_ip, _port, msg}} = :gen_udp.recv(s, 0, @timeout)
+      assert msg == scoremsg
+    end
+    {:ok, {_ip, _port, invitation1}} = :gen_udp.recv(s1, 0, @timeout)
+    {:ok, {_ip, _port, invitation2}} = :gen_udp.recv(s2, 0, @timeout)
+    {:ok, {_ip, _port, invitation3}} = :gen_udp.recv(s3, 0, @timeout)
+    assert invitation1 =~ ~r/ROUND STARTING;[0-9a-fA-F]{32}\n/
+    assert invitation2 =~ ~r/ROUND STARTING;[0-9a-fA-F]{32}\n/
+    assert invitation3 == "ROUND STARTING\n"
   end
 
 end

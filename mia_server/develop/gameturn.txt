@@ -31,11 +31,15 @@ end
 == Player wants to see ==
 Client -> Server: SEE;token_a
 Server -> Clients:PLAYER WANTS TO SEE;name
-Server -> Clients:ACTUAL DICE;dice
-alt Player was right about bluff
-	Server -> Clients:PLAYER LOST;name_2;CAUGHT BLUFFING
-else Throw was correctly announced
-	Server -> Clients:PLAYER LOST;name;SEE FAILED
+alt Roll was made before
+	Server -> Clients:ACTUAL DICE;dice
+	alt Player was right about bluff
+		Server -> Clients:PLAYER LOST;name_2;CAUGHT BLUFFING
+	else Throw was correctly announced
+		Server -> Clients:PLAYER LOST;name;SEE FAILED
+	end
+else No roll was made before
+	Server -> Clients: PLAYER LOST;name;SEE BEFORE FIRST ROLL
 end
 
 == Player made invalid command ==
