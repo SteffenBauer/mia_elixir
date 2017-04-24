@@ -10,7 +10,7 @@ defmodule MiaServer.GameplayTest do
     end
   end
 
-  @timeout Application.get_env(:mia_server, :timeout) + 50
+  @timeout round(Application.get_env(:mia_server, :timeout) * 1.05)
 
   defp open_udp_socket(ip) do
     opts = [:binary, active: false, ip: ip]
@@ -120,6 +120,30 @@ defmodule MiaServer.GameplayTest do
       {:ok, {_ip, _port, msg}} = :gen_udp.recv(s, 0, @timeout)
       assert msg == scoremsg
     end
+  end
+
+  test "Player rolls but fails to announce" do
+    {start, {s1, p1}, {s2, p2}, {s3, _p3}} = setup_game()
+    {{{socket, port}, _}, player} = extract_player_seq(start, {s1, p1}, {s2, p2})
+    {:ok, {_ip, _port, msg}} = :gen_udp.recv(socket, 0, @timeout)
+    [_, token] = Regex.run(~r/YOUR TURN;([0-9a-fA-F]{32})\n/, msg)
+    :gen_udp.send(socket, 'localhost', port, "ROLL;#{token}")
+    for s <- [s1, s2, s3], do: :gen_udp.recv(s, 0, @timeout) # PLAYER ROLLS
+    :gen_udp.recv(socket, 0, @timeout) # ROLLED;<dice>
+    Process.sleep(@timeout)
+    for s <- [s1, s2, s3] do
+      {:ok, {_ip, _port, msg}} = :gen_udp.recv(s, 0, @timeout)
+      assert msg == "PLAYER LOST;#{player};DID NOT ANNOUNCE\n"
+    end
+    scoremsg = case player do
+      "player1" -> "SCORE;player1:0,player2:1\n"
+      "player2" -> "SCORE;player1:1,player2:0\n"
+    end
+    for s <- [s1, s2, s3] do
+      {:ok, {_ip, _port, msg}} = :gen_udp.recv(s, 0, @timeout)
+      assert msg == scoremsg
+    end
+
   end
 
 end

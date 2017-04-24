@@ -27,13 +27,13 @@ defmodule MiaServer.UDP do
   end
 
   def handle_info({:udp, _socket, ip, port, data}, socket) do
-    Logger.debug("Received '#{inspect data}' from #{inspect ip}:#{inspect port}")
+    Logger.debug("Received #{inspect data} from #{inspect ip}:#{inspect port}")
     MiaServer.Parser.parse_packet(ip, port, String.trim(data))
     {:noreply, socket}
   end
 
   def handle_cast({ip, port, message}, socket) do
-    Logger.debug("Send '#{inspect message}' to #{inspect ip}:#{inspect port}")
+    Logger.debug("Send #{inspect message} to #{inspect ip}:#{inspect port}")
     :gen_udp.send(socket, ip, port, message <> "\n")
     {:noreply, socket}
   end

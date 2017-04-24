@@ -40,13 +40,9 @@ defmodule MiaServer.Game do
   end
 
   def handle_cast({:invalid, ip, _port, _msg}, %{:state => :round} = state) do
-    {ipp, _portp, name} = MiaServer.Playerlist.get_participating_player(state.playerno)
+    {ipp, _portp, _name} = MiaServer.Playerlist.get_participating_player(state.playerno)
     if ip == ipp do
-      broadcast_message("PLAYER LOST;#{name};INVALID TURN")
-      update_score(state.playerno, :lost)
-      get_scoremsg() |> broadcast_message()
-      Process.send_after(self(), :check_registry, @timeout)
-      {:noreply, %{state | :state => :waiting, :round => state.round+1, :playerno => 0, :token => nil, :action => nil}}
+      {:noreply, player_lost_aftermath(state, "INVALID TURN")}
     else
       {:noreply, state}
     end
@@ -98,16 +94,16 @@ defmodule MiaServer.Game do
     token = uuid()
     reply = "ROLLED;#{dice};#{token}"
     MiaServer.UDP.reply(ip, port, reply)
-    {:noreply, %{state | :token => token}}
+    Process.send_after(self(), :check_announcement, @timeout)
+    {:noreply, %{state | :state => :wait_for_announce, :token => token, :action => nil}}
   end
 
   def handle_info(:check_action, %{:state => :round, :action => nil} = state) do
-    {_ip, _port, name} = MiaServer.Playerlist.get_participating_player(state.playerno)
-    broadcast_message("PLAYER LOST;#{name};DID NOT TAKE TURN")
-    update_score(state.playerno, :lost)
-    get_scoremsg() |> broadcast_message()
-    Process.send_after(self(), :check_registry, @timeout)
-    {:noreply, %{state | :state => :waiting, :round => state.round+1, :playerno => 0, :token => nil, :action => nil}}
+    {:noreply, player_lost_aftermath(state, "DID NOT TAKE TURN")}
+  end
+
+  def handle_info(:check_announcement, %{:state => :wait_for_announce, :action => nil} = state) do
+    {:noreply, player_lost_aftermath(state, "DID NOT ANNOUNCE")}
   end
 
 ## Private helper functions
@@ -131,6 +127,15 @@ defmodule MiaServer.Game do
   end
   defp generate_invitation(ip, port, :spectator) do
     {ip, port, "ROUND STARTING"}
+  end
+
+  defp player_lost_aftermath(state, reason) do
+    {_ip, _port, name} = MiaServer.Playerlist.get_participating_player(state.playerno)
+    broadcast_message("PLAYER LOST;#{name};#{reason}")
+    update_score(state.playerno, :lost)
+    get_scoremsg() |> broadcast_message()
+    Process.send_after(self(), :check_registry, @timeout)
+    %{state | :state => :waiting, :round => state.round+1, :playerno => 0, :token => nil, :action => nil}
   end
 
   defp uuid() do
