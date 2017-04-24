@@ -14,8 +14,8 @@ defmodule MiaServer.Parser do
         MiaServer.Game.do_roll(token)
       "SEE;" <> _token ->
         nil
-      _ ->
-        nil
+      other ->
+        MiaServer.Game.invalid(ip, port, other)
     end
   end
 

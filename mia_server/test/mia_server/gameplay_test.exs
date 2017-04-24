@@ -102,4 +102,24 @@ defmodule MiaServer.GameplayTest do
     assert invitation3 == "ROUND STARTING\n"
   end
 
+  test "Player sends invalid command" do
+    {start, {s1, p1}, {s2, p2}, {s3, _p3}} = setup_game()
+    {{{socket, port}, _}, player} = extract_player_seq(start, {s1, p1}, {s2, p2})
+    {:ok, {_ip, _port, msg}} = :gen_udp.recv(socket, 0, @timeout)
+    [_, token] = Regex.run(~r/YOUR TURN;([0-9a-fA-F]{32})\n/, msg)
+    :gen_udp.send(socket, 'localhost', port, "BLABLA;#{token}")
+    for s <- [s1, s2, s3] do
+      {:ok, {_ip, _port, msg}} = :gen_udp.recv(s, 0, @timeout)
+      assert msg == "PLAYER LOST;#{player};INVALID TURN\n"
+    end
+    scoremsg = case player do
+      "player1" -> "SCORE;player1:0,player2:1\n"
+      "player2" -> "SCORE;player1:1,player2:0\n"
+    end
+    for s <- [s1, s2, s3] do
+      {:ok, {_ip, _port, msg}} = :gen_udp.recv(s, 0, @timeout)
+      assert msg == scoremsg
+    end
+  end
+
 end

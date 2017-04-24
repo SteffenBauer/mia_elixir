@@ -10,3 +10,5 @@ config :logger,
 config :logger, :console,
   format: "$date $time [$level] $levelpad$message\n",
   colors: [info: :green]
+
+import_config "#{Mix.env}.exs"

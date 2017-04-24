@@ -21,9 +21,6 @@ alt Player announces
 		Server -> Clients: PLAYER LOST;name;LIED ABOUT MIA
 	end
 
-else Player makes invalid command
-	Client -> Server: <invalid command>
-	Server -> Clients: PLAYER LOST;name;INVALID TURN
 else Player timedout
 	Server -> Clients: PLAYER LOST;name;DID NOT ANNOUNCE
 end
@@ -42,7 +39,7 @@ else No roll was made before
 	Server -> Clients: PLAYER LOST;name;SEE BEFORE FIRST ROLL
 end
 
-== Player made invalid command ==
+== Player makes invalid command ==
 Client -> Server: <invalid command>
 Server -> Clients: PLAYER LOST;name;INVALID TURN
 

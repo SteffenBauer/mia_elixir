@@ -18,6 +18,10 @@ defmodule MiaServer.Game do
     GenServer.cast(__MODULE__, {:player_rolls, token})
   end
 
+  def invalid(ip, port, msg) do
+    GenServer.cast(__MODULE__, {:invalid, ip, port, msg})
+  end
+
 ## GenServer Callbacks
 
   def init(:ok) do
@@ -33,6 +37,19 @@ defmodule MiaServer.Game do
 
   def handle_cast({:player_rolls, token}, %{:state => :round, :token => token} = state) do
     {:noreply, %{state | :action => :rolls}}
+  end
+
+  def handle_cast({:invalid, ip, _port, _msg}, %{:state => :round} = state) do
+    {ipp, _portp, name} = MiaServer.Playerlist.get_participating_player(state.playerno)
+    if ip == ipp do
+      broadcast_message("PLAYER LOST;#{name};INVALID TURN")
+      update_score(state.playerno, :lost)
+      get_scoremsg() |> broadcast_message()
+      Process.send_after(self(), :check_registry, @timeout)
+      {:noreply, %{state | :state => :waiting, :round => state.round+1, :playerno => 0, :token => nil, :action => nil}}
+    else
+      {:noreply, state}
+    end
   end
 
   def handle_info(:check_registry, %{:state => :waiting} = state) do
