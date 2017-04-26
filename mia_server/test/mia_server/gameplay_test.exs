@@ -136,6 +136,7 @@ defmodule MiaServer.GameplayTest do
     for s <- [s1, s2, s3], do: :gen_udp.recv(s, 0, @timeout) # PLAYER ROLLS
     {:ok, {_ip, _port, msg}} = :gen_udp.recv(socket1, 0, @timeout)
     [_, token] = Regex.run(~r/ROLLED;[1-6],[1-6];([0-9a-fA-F]{32})/, msg)
+    MiaServer.Game.testing_inject_dice(MiaServer.Dice.new(3,1))
     :gen_udp.send(socket1, 'localhost', port1, "ANNOUNCE;3,1;#{token}")
     # Players announcement is broadcast
     for s <- [s1, s2, s3] do
@@ -145,6 +146,22 @@ defmodule MiaServer.GameplayTest do
     # Second players turn
     assert {:ok, {_ip, _port, msg}} = :gen_udp.recv(socket2, 0, @timeout)
     assert msg =~ ~r/YOUR TURN;([0-9a-fA-F]{32})\n/
+    [_, token] = Regex.run(~r/YOUR TURN;([0-9a-fA-F]{32})\n/, msg)
+    :gen_udp.send(socket2, 'localhost', port2, "ROLL;#{token}")
+    for s <- [s1, s2, s3], do: :gen_udp.recv(s, 0, @timeout) # PLAYER ROLLS
+    {:ok, {_ip, _port, msg}} = :gen_udp.recv(socket2, 0, @timeout)
+    [_, token] = Regex.run(~r/ROLLED;[1-6],[1-6];([0-9a-fA-F]{32})/, msg)
+    MiaServer.Game.testing_inject_dice(MiaServer.Dice.new(3,2))
+    :gen_udp.send(socket2, 'localhost', port2, "ANNOUNCE;4,1;#{token}")
+    # Players announcement is broadcast
+    for s <- [s1, s2, s3] do
+      {:ok, {_ip, _port, msg}} = :gen_udp.recv(s, 0, @timeout)
+      assert msg == "ANNOUNCED;#{player2};4,1\n"
+    end
+    # Again first players turn
+    assert {:ok, {_ip, _port, msg}} = :gen_udp.recv(socket1, 0, @timeout)
+    assert msg =~ ~r/YOUR TURN;([0-9a-fA-F]{32})\n/
+
   end
 
 end
