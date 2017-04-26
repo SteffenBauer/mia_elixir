@@ -76,4 +76,11 @@ defmodule MiaServer.DiceTest do
     assert Dice.parse("Garbage") == nil
   end
 
+  test "Invalid dice" do
+    assert Dice.new(0, 4) == :invalid
+    assert Dice.new(7, 2) == :invalid
+    assert Dice.new(4, 9) == :invalid
+    assert Dice.new("a", "z") == :invalid
+  end
+
 end

@@ -2,6 +2,15 @@ defmodule MiaServer.Game do
   use GenServer
   require Logger
 
+  defstruct state: :waiting,
+            round: 1,
+            playerno: nil,
+            token: nil,
+            action: nil,
+            timer: nil,
+            dice: nil,
+            announced: nil
+
   @timeout Application.get_env(:mia_server, :timeout)
 
   def start_link() do
@@ -18,16 +27,31 @@ defmodule MiaServer.Game do
     GenServer.cast(__MODULE__, {:player_rolls, token})
   end
 
+  def do_announce(d1, d2, token) do
+    GenServer.cast(__MODULE__, {:player_announces, d1, d2, token})
+  end
+
+  def do_see(token) do
+    GenServer.cast(__MODULE__, {:player_sees, token})
+  end
+
   def invalid(ip, port, msg) do
     GenServer.cast(__MODULE__, {:invalid, ip, port, msg})
+  end
+
+  def testing_inject_dice(dice) do
+    GenServer.cast(__MODULE__, {:inject, dice})
   end
 
 ## GenServer Callbacks
 
   def init(:ok) do
     Logger.info "Starting MIA game machine"
-    timer = Process.send_after(self(), :check_registry, @timeout)
-    {:ok, %{:state => :waiting, :round => 1, :playerno => 0, :token => nil, :action => nil, :timer => timer}}
+    {:ok, %MiaServer.Game{:timer => Process.send_after(self(), :check_registry, @timeout)} }
+  end
+
+  def handle_cast({:inject, dice}, state) do
+    {:noreply, %{state | :dice => dice}}
   end
 
   def handle_cast({:join, ip, port, token}, %{:state => :wait_for_joins} = state) do
@@ -39,13 +63,28 @@ defmodule MiaServer.Game do
     {:noreply, %{state | :action => :rolls}}
   end
 
+  def handle_cast({:player_sees, token}, %{:token => token} = state) do
+    {:noreply, state}
+  end
+
+  def handle_cast({:player_announces, _, _, token}, %{:token => token, :dice => nil} = state) do
+    {:noreply, player_lost_aftermath(state, "INVALID TURN")}
+  end
+
+  def handle_cast({:player_announces, d1, d2, token}, %{:state => :wait_for_announce, :token => token} = state) do
+    case MiaServer.Dice.new(d1, d2) do
+      :invalid ->
+        {:noreply, player_lost_aftermath(state, "INVALID TURN")}
+      dice ->
+        {_ip, _port, name} = MiaServer.Playerlist.get_participating_player(state.playerno)
+        broadcast_message("ANNOUNCED;#{name};#{dice}")
+        {:noreply, %{state | :announced => dice}}
+    end
+  end
+
   def handle_cast({:invalid, ip, _port, _msg}, %{:state => :round} = state) do
     {ipp, _portp, _name} = MiaServer.Playerlist.get_participating_player(state.playerno)
-    if ip == ipp do
-      {:noreply, player_lost_aftermath(state, "INVALID TURN")}
-    else
-      {:noreply, state}
-    end
+    {:noreply, if(ip == ipp, do: player_lost_aftermath(state, "INVALID TURN"), else: state)}
   end
 
   def handle_info(:check_registry, %{:state => :waiting} = state) do
@@ -83,7 +122,9 @@ defmodule MiaServer.Game do
     {ip, port, _name} = MiaServer.Playerlist.get_participating_player(state.playerno)
     token = uuid()
     MiaServer.UDP.reply(ip, port, "YOUR TURN;#{token}")
-    {:noreply, %{state | :token => token, :action => nil, :timer => Process.send_after(self(), :check_action, @timeout)}}
+    {:noreply, %{state | :token => token,
+                         :action => nil,
+                         :timer => Process.send_after(self(), :check_action, @timeout)}}
   end
 
   def handle_info(:check_action, %{:state => :round, :action => :rolls} = state) do
@@ -94,7 +135,11 @@ defmodule MiaServer.Game do
     token = uuid()
     reply = "ROLLED;#{dice};#{token}"
     MiaServer.UDP.reply(ip, port, reply)
-    {:noreply, %{state | :state => :wait_for_announce, :token => token, :action => nil, :timer => Process.send_after(self(), :check_announcement, @timeout)}}
+    {:noreply, %{state | :state => :wait_for_announce,
+                         :token => token,
+                         :action => nil,
+                         :dice => dice,
+                         :timer => Process.send_after(self(), :check_announcement, @timeout)}}
   end
 
   def handle_info(:check_action, %{:state => :round, :action => nil} = state) do
@@ -134,7 +179,7 @@ defmodule MiaServer.Game do
     broadcast_message("PLAYER LOST;#{name};#{reason}")
     update_score(state.playerno, :lost)
     get_scoremsg() |> broadcast_message()
-    %{state | :state => :waiting, :round => state.round+1, :playerno => 0, :token => nil, :action => nil, :timer => Process.send_after(self(), :check_registry, @timeout)}
+    %MiaServer.Game{:round => state.round+1, :timer => Process.send_after(self(), :check_registry, @timeout)}
   end
 
   defp uuid() do

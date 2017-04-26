@@ -127,4 +127,21 @@ defmodule MiaServer.GameplayTest do
     check_player_lost_aftermath(player, s1, s2, s3, "DID NOT ANNOUNCE")
   end
 
+  test "First player rolls and announces" do
+    {start, {s1, p1}, {s2, p2}, {s3, _p3}} = setup_game()
+    {{{socket, port}, _}, player} = extract_player_seq(start, {s1, p1}, {s2, p2})
+    {:ok, {_ip, _port, msg}} = :gen_udp.recv(socket, 0, @timeout)
+    [_, token] = Regex.run(~r/YOUR TURN;([0-9a-fA-F]{32})\n/, msg)
+    :gen_udp.send(socket, 'localhost', port, "ROLL;#{token}")
+    for s <- [s1, s2, s3], do: :gen_udp.recv(s, 0, @timeout) # PLAYER ROLLS
+    {:ok, {_ip, _port, msg}} = :gen_udp.recv(socket, 0, @timeout)
+    [_, token] = Regex.run(~r/ROLLED;[1-6],[1-6];([0-9a-fA-F]{32})/, msg)
+    :gen_udp.send(socket, 'localhost', port, "ANNOUNCE;3,1;#{token}")
+    for s <- [s1, s2, s3] do
+      {:ok, {_ip, _port, msg}} = :gen_udp.recv(s, 0, @timeout)
+      assert msg == "ANNOUNCED;#{player};3,1\n"
+    end
+
+  end
+
 end

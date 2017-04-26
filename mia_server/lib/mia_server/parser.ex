@@ -8,12 +8,12 @@ defmodule MiaServer.Parser do
         MiaServer.Registry.register_spectator(ip, port)
       "JOIN;" <> token ->
         MiaServer.Game.register_join(ip, port, token)
-      "ANNOUNCE;" <> <<_dice::binary-size(3)>> <> ";" <> _token ->
-        nil
+      "ANNOUNCE;" <> <<d1::binary-size(1)>> <> "," <> <<d2::binary-size(1)>> <> ";" <> token ->
+        MiaServer.Game.do_announce(String.to_integer(d1), String.to_integer(d2), token)
       "ROLL;" <> token ->
         MiaServer.Game.do_roll(token)
-      "SEE;" <> _token ->
-        nil
+      "SEE;" <> token ->
+        MiaServer.Game.do_see(token)
       other ->
         MiaServer.Game.invalid(ip, port, other)
     end
