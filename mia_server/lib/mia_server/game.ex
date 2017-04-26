@@ -26,8 +26,8 @@ defmodule MiaServer.Game do
 
   def init(:ok) do
     Logger.info "Starting MIA game machine"
-    Process.send_after(self(), :check_registry, @timeout)
-    {:ok, %{:state => :waiting, :round => 1, :playerno => 0, :token => nil, :action => nil}}
+    timer = Process.send_after(self(), :check_registry, @timeout)
+    {:ok, %{:state => :waiting, :round => 1, :playerno => 0, :token => nil, :action => nil, :timer => timer}}
   end
 
   def handle_cast({:join, ip, port, token}, %{:state => :wait_for_joins} = state) do
@@ -49,22 +49,22 @@ defmodule MiaServer.Game do
   end
 
   def handle_info(:check_registry, %{:state => :waiting} = state) do
+    Process.cancel_timer(state.timer)
     registered_participants = MiaServer.Registry.get_registered()
     registered_players = registered_participants
       |> Enum.filter(fn [_, _, role] -> role == :player end)
-    nextstate = cond do
+    {nextstate, timer} = cond do
       length(registered_players) > 1 ->
         send_invitations(registered_participants)
-        Process.send_after(self(), :check_joins, @timeout)
-        :wait_for_joins
+        {:wait_for_joins, Process.send_after(self(), :check_joins, @timeout)}
       true ->
-        Process.send_after(self(), :check_registry, @timeout)
-        :waiting
+        {:waiting, Process.send_after(self(), :check_registry, @timeout)}
     end
-    {:noreply, %{state | :state => nextstate}}
+    {:noreply, %{state | :state => nextstate, :timer => timer}}
   end
 
   def handle_info(:check_joins, %{:state => :wait_for_joins} = state) do
+    Process.cancel_timer(state.timer)
     joined_players = MiaServer.Playerlist.get_joined_players()
     {reply, state, next} = case length(joined_players) do
       0 -> {"ROUND CANCELED;NO PLAYERS", %{state | :state => :waiting}, :check_registry}
@@ -75,27 +75,26 @@ defmodule MiaServer.Game do
            {"ROUND STARTED;#{state.round};#{playerlist}", %{state | :state => :round, :playerno => 0}, :send_your_turn}
     end
     broadcast_message(reply)
-    Process.send_after(self(), next, @timeout)
-    {:noreply, state}
+    {:noreply, %{state | :timer => Process.send_after(self(), next, @timeout)}}
   end
 
   def handle_info(:send_your_turn, %{:state => :round} = state) do
+    Process.cancel_timer(state.timer)
     {ip, port, _name} = MiaServer.Playerlist.get_participating_player(state.playerno)
     token = uuid()
     MiaServer.UDP.reply(ip, port, "YOUR TURN;#{token}")
-    Process.send_after(self(), :check_action, @timeout)
-    {:noreply, %{state | :token => token, :action => nil}}
+    {:noreply, %{state | :token => token, :action => nil, :timer => Process.send_after(self(), :check_action, @timeout)}}
   end
 
   def handle_info(:check_action, %{:state => :round, :action => :rolls} = state) do
+    Process.cancel_timer(state.timer)
     {ip, port, name} = MiaServer.Playerlist.get_participating_player(state.playerno)
     broadcast_message("PLAYER ROLLS;#{name}")
     dice = MiaServer.DiceRoller.roll()
     token = uuid()
     reply = "ROLLED;#{dice};#{token}"
     MiaServer.UDP.reply(ip, port, reply)
-    Process.send_after(self(), :check_announcement, @timeout)
-    {:noreply, %{state | :state => :wait_for_announce, :token => token, :action => nil}}
+    {:noreply, %{state | :state => :wait_for_announce, :token => token, :action => nil, :timer => Process.send_after(self(), :check_announcement, @timeout)}}
   end
 
   def handle_info(:check_action, %{:state => :round, :action => nil} = state) do
@@ -130,12 +129,12 @@ defmodule MiaServer.Game do
   end
 
   defp player_lost_aftermath(state, reason) do
+    Process.cancel_timer(state.timer)
     {_ip, _port, name} = MiaServer.Playerlist.get_participating_player(state.playerno)
     broadcast_message("PLAYER LOST;#{name};#{reason}")
     update_score(state.playerno, :lost)
     get_scoremsg() |> broadcast_message()
-    Process.send_after(self(), :check_registry, @timeout)
-    %{state | :state => :waiting, :round => state.round+1, :playerno => 0, :token => nil, :action => nil}
+    %{state | :state => :waiting, :round => state.round+1, :playerno => 0, :token => nil, :action => nil, :timer => Process.send_after(self(), :check_registry, @timeout)}
   end
 
   defp uuid() do

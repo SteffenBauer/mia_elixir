@@ -4,4 +4,4 @@ config :mia_server,
   timeout: 10
 
 config :logger,
-  level: :debug
+  level: :warn
