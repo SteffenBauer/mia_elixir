@@ -72,13 +72,17 @@ defmodule MiaServer.Game do
   end
 
   def handle_cast({:player_announces, d1, d2, token}, %{:state => :wait_for_announce, :token => token} = state) do
+    Process.cancel_timer(state.timer)
     case MiaServer.Dice.new(d1, d2) do
       :invalid ->
         {:noreply, player_lost_aftermath(state, "INVALID TURN")}
       dice ->
         {_ip, _port, name} = MiaServer.Playerlist.get_participating_player(state.playerno)
         broadcast_message("ANNOUNCED;#{name};#{dice}")
-        {:noreply, %{state | :announced => dice}}
+        {:noreply, %{state | :state => :round,
+                             :playerno => next_playerno(state),
+                             :announced => dice,
+                             :timer => Process.send_after(self(), :send_your_turn, @timeout)}}
     end
   end
 
@@ -203,6 +207,11 @@ defmodule MiaServer.Game do
         MiaServer.Playerlist.add_participating_player(num, ip, port, name)
         num+1 end)
     playerlist
+  end
+
+  defp next_playerno(state) do
+    numplayers = MiaServer.Playerlist.get_participating_number()
+    if state.playerno >= numplayers-1, do: 0, else: state.playerno+1
   end
 
   defp playerstring(playerlist) do
