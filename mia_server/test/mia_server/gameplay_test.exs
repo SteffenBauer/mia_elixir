@@ -192,4 +192,37 @@ defmodule MiaServer.GameplayTest do
       |> check_and_gettoken(:yourturn)
   end
 
+  test "Player announces lower dice" do
+    {startmsg, sockets, ports} = setup_game()
+    {1, [player1, player2 | _], [socket1, socket2 | _], [port1, port2 | _]} = extract_player_seq(startmsg, sockets, ports)
+    MiaServer.Game.testing_inject_dice(6,1)
+    socket1
+      |> receive_message()
+      |> check_and_gettoken(:yourturn)
+      |> make_roll_msg()
+      |> send_to_server(socket1, port1)
+    check_broadcast_message(sockets, "PLAYER ROLLS;#{player1}\n")
+    socket1
+      |> receive_message()
+      |> check_and_gettoken(:rolled)
+      |> make_announcement_msg(6,1)
+      |> send_to_server(socket1, port1)
+    check_broadcast_message(sockets, "ANNOUNCED;#{player1};6,1\n")
+    # Second players turn
+    MiaServer.Game.testing_inject_dice(3,2)
+    socket2
+      |> receive_message()
+      |> check_and_gettoken(:yourturn)
+      |> make_roll_msg()
+      |> send_to_server(socket2, port2)
+    check_broadcast_message(sockets, "PLAYER ROLLS;#{player2}\n")
+    socket2
+      |> receive_message()
+      |> check_and_gettoken(:rolled)
+      |> make_announcement_msg(5,1)
+      |> send_to_server(socket2, port2)
+    check_broadcast_message(sockets, "ANNOUNCED;#{player2};5,1\n")
+    check_player_lost_aftermath(player2, sockets, "ANNOUNCED LOSING DICE")
+  end
+
 end
