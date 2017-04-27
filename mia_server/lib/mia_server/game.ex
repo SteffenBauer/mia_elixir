@@ -9,7 +9,8 @@ defmodule MiaServer.Game do
             action: nil,
             timer: nil,
             dice: nil,
-            announced: nil
+            announced: nil,
+            injected: nil
 
   @timeout Application.get_env(:mia_server, :timeout)
 
@@ -39,8 +40,8 @@ defmodule MiaServer.Game do
     GenServer.cast(__MODULE__, {:invalid, ip, port, msg})
   end
 
-  def testing_inject_dice(dice) do
-    GenServer.cast(__MODULE__, {:inject, dice})
+  def testing_inject_dice(d1, d2) do
+    GenServer.cast(__MODULE__, {:inject, d1, d2})
   end
 
 ## GenServer Callbacks
@@ -50,8 +51,9 @@ defmodule MiaServer.Game do
     {:ok, %MiaServer.Game{:timer => Process.send_after(self(), :check_registry, @timeout)} }
   end
 
-  def handle_cast({:inject, dice}, state) do
-    {:noreply, %{state | :dice => dice}}
+  def handle_cast({:inject, d1, d2}, state) do
+    Logger.debug("Inject: Next die roll will be #{d1},#{d2}")
+    {:noreply, %{state | :injected => MiaServer.Dice.new(d1, d2)}}
   end
 
   def handle_cast({:join, ip, port, token}, %{:state => :wait_for_joins} = state) do
@@ -135,7 +137,10 @@ defmodule MiaServer.Game do
     Process.cancel_timer(state.timer)
     {ip, port, name} = MiaServer.Playerlist.get_participating_player(state.playerno)
     broadcast_message("PLAYER ROLLS;#{name}")
-    dice = MiaServer.DiceRoller.roll()
+    dice = case state.injected do
+      nil -> MiaServer.DiceRoller.roll()
+      injected -> injected
+    end
     token = uuid()
     reply = "ROLLED;#{dice};#{token}"
     MiaServer.UDP.reply(ip, port, reply)
@@ -143,6 +148,7 @@ defmodule MiaServer.Game do
                          :token => token,
                          :action => nil,
                          :dice => dice,
+                         :injected => nil,
                          :timer => Process.send_after(self(), :check_announcement, @timeout)}}
   end
 

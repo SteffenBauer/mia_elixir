@@ -159,13 +159,13 @@ defmodule MiaServer.GameplayTest do
   test "Game round with consecutive announcements" do
     {startmsg, sockets, ports} = setup_game()
     {1, [player1, player2 | _], [socket1, socket2 | _], [port1, port2 | _]} = extract_player_seq(startmsg, sockets, ports)
+    MiaServer.Game.testing_inject_dice(3,1)
     socket1
       |> receive_message()
       |> check_and_gettoken(:yourturn)
       |> make_roll_msg()
       |> send_to_server(socket1, port1)
     check_broadcast_message(sockets, "PLAYER ROLLS;#{player1}\n")
-    MiaServer.Game.testing_inject_dice(MiaServer.Dice.new(3,1))
     socket1
       |> receive_message()
       |> check_and_gettoken(:rolled)
@@ -173,13 +173,13 @@ defmodule MiaServer.GameplayTest do
       |> send_to_server(socket1, port1)
     check_broadcast_message(sockets, "ANNOUNCED;#{player1};3,1\n")
     # Second players turn
+    MiaServer.Game.testing_inject_dice(3,2)
     socket2
       |> receive_message()
       |> check_and_gettoken(:yourturn)
       |> make_roll_msg()
       |> send_to_server(socket2, port2)
     check_broadcast_message(sockets, "PLAYER ROLLS;#{player2}\n")
-    MiaServer.Game.testing_inject_dice(MiaServer.Dice.new(3,2))
     socket2
       |> receive_message()
       |> check_and_gettoken(:rolled)
