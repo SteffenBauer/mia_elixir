@@ -45,119 +45,111 @@ defmodule MiaServer.GameplayTest do
     {:ok, {_ip, _port, _start1}} = :gen_udp.recv(socket1, 0, @timeout)
     {:ok, {_ip, _port, _start2}} = :gen_udp.recv(socket2, 0, @timeout)
     {:ok, {_i, _p, start}} = :gen_udp.recv(socket3, 0, @timeout)
-    {start, {socket1, port1}, {socket2, port2}, {socket3, port3}}
+    {start, [socket1, socket2, socket3], [port1, port2, port3]}
   end
 
-  defp extract_player_seq(startmsg, addr1, addr2) do
-    [_, _turn, first, second] = Regex.run(~r/ROUND STARTED;(.*);(.*),(.*)\n/, startmsg)
-    case first do
-      "player1" -> {addr1, first, addr2, second}
-      "player2" -> {addr2, first, addr1, second}
+  defp extract_player_seq(startmsg, sockets, ports) do
+    [_, turn, seq] = Regex.run(~r/ROUND STARTED;(.*);(.*)\n/, startmsg)
+    playerseq = seq |> String.split(",")
+    socketseq = playerseq |> Enum.map(fn "player" <> n -> Enum.at(sockets, String.to_integer(n)-1) end)
+    portseq = playerseq |> Enum.map(fn "player" <> n -> Enum.at(ports, String.to_integer(n)-1) end)
+    {String.to_integer(turn), playerseq, socketseq, portseq}
+  end
+
+  defp check_broadcast_message(sockets, msg) do
+    for s <- sockets do
+      assert {:ok, {_ip, _port, m}} = :gen_udp.recv(s, 0, @timeout)
+      assert msg == m
     end
   end
 
-  defp check_player_lost_aftermath(player, s1, s2, s3, reason) do
-    for s <- [s1, s2, s3] do
-      {:ok, {_ip, _port, msg}} = :gen_udp.recv(s, 0, @timeout)
-      assert msg == "PLAYER LOST;#{player};#{reason}\n"
-    end
+  defp check_player_lost_aftermath(player, sockets, reason) do
+    check_broadcast_message(sockets, "PLAYER LOST;#{player};#{reason}\n")
     scoremsg = case player do
       "player1" -> "SCORE;player1:0,player2:1\n"
       "player2" -> "SCORE;player1:1,player2:0\n"
     end
-    for s <- [s1, s2, s3] do
-      {:ok, {_ip, _port, msg}} = :gen_udp.recv(s, 0, @timeout)
-      assert msg == scoremsg
+    check_broadcast_message(sockets, scoremsg)
+    invites = for s <- sockets do
+      {:ok, {_ip, _port, invitation}} = :gen_udp.recv(s, 0, @timeout)
+      invitation
     end
-    {:ok, {_ip, _port, invitation1}} = :gen_udp.recv(s1, 0, @timeout)
-    {:ok, {_ip, _port, invitation2}} = :gen_udp.recv(s2, 0, @timeout)
-    {:ok, {_ip, _port, invitation3}} = :gen_udp.recv(s3, 0, @timeout)
-    assert invitation1 =~ ~r/ROUND STARTING;[0-9a-fA-F]{32}\n/
-    assert invitation2 =~ ~r/ROUND STARTING;[0-9a-fA-F]{32}\n/
-    assert invitation3 == "ROUND STARTING\n"
+    [i | invites ] = invites; assert i =~ ~r/ROUND STARTING;[0-9a-fA-F]{32}\n/
+    [i | invites ] = invites; assert i =~ ~r/ROUND STARTING;[0-9a-fA-F]{32}\n/
+    assert invites == ["ROUND STARTING\n"]
   end
 
   test "First player receives Your Turn" do
-    {start, {s1, p1}, {s2, p2}, {_s3, _p3}} = setup_game()
-    {{socket, _port}, _, _, _} = extract_player_seq(start, {s1, p1}, {s2, p2})
+    {startmsg, sockets, ports} = setup_game()
+    {turn, _players, [socket | _], _ports} = extract_player_seq(startmsg, sockets, ports)
+    assert turn == 1
     assert {:ok, {_ip, _port, msg}} = :gen_udp.recv(socket, 0, @timeout)
     assert msg =~ ~r/YOUR TURN;([0-9a-fA-F]{32})\n/
   end
 
   test "First player rolls and receives dice" do
-    {start, {s1, p1}, {s2, p2}, {s3, _p3}} = setup_game()
-    {{socket, port}, player, _, _} = extract_player_seq(start, {s1, p1}, {s2, p2})
+    {startmsg, sockets, ports} = setup_game()
+    {1, [player | _], [socket | _], [port | _]} = extract_player_seq(startmsg, sockets, ports)
     {:ok, {_ip, _port, msg}} = :gen_udp.recv(socket, 0, @timeout)
     [_, token] = Regex.run(~r/YOUR TURN;([0-9a-fA-F]{32})\n/, msg)
     :gen_udp.send(socket, 'localhost', port, "ROLL;#{token}")
-    for s <- [s1, s2, s3] do
-      {:ok, {_ip, _port, msg}} = :gen_udp.recv(s, 0, @timeout)
-      assert msg == "PLAYER ROLLS;#{player}\n"
-    end
+    check_broadcast_message(sockets, "PLAYER ROLLS;#{player}\n")
     {:ok, {_ip, _port, msg}} = :gen_udp.recv(socket, 0, @timeout)
     assert msg =~ ~r/ROLLED;[1-6],[1-6];[0-9a-fA-F]{32}/
   end
 
   test "First player does nothing" do
-    {start, {s1, p1}, {s2, p2}, {s3, _p3}} = setup_game()
-    {{socket, _port}, player, _, _} = extract_player_seq(start, {s1, p1}, {s2, p2})
+    {startmsg, sockets, ports} = setup_game()
+    {1, [player | _], [socket | _], _} = extract_player_seq(startmsg, sockets, ports)
     :gen_udp.recv(socket, 0, @timeout)
     Process.sleep(@timeout)
-    check_player_lost_aftermath(player, s1, s2, s3, "DID NOT TAKE TURN")
+    check_player_lost_aftermath(player, sockets, "DID NOT TAKE TURN")
   end
 
   test "Player sends invalid command" do
-    {start, {s1, p1}, {s2, p2}, {s3, _p3}} = setup_game()
-    {{socket, port}, player, _, _} = extract_player_seq(start, {s1, p1}, {s2, p2})
+    {startmsg, sockets, ports} = setup_game()
+    {1, [player | _], [socket | _], [port | _]} = extract_player_seq(startmsg, sockets, ports)
     {:ok, {_ip, _port, msg}} = :gen_udp.recv(socket, 0, @timeout)
     [_, token] = Regex.run(~r/YOUR TURN;([0-9a-fA-F]{32})\n/, msg)
     :gen_udp.send(socket, 'localhost', port, "BLABLA;#{token}")
-    check_player_lost_aftermath(player, s1, s2, s3, "INVALID TURN")
+    check_player_lost_aftermath(player, sockets, "INVALID TURN")
   end
 
   test "Player rolls but fails to announce" do
-    {start, {s1, p1}, {s2, p2}, {s3, _p3}} = setup_game()
-    {{socket, port}, player, _, _} = extract_player_seq(start, {s1, p1}, {s2, p2})
+    {startmsg, sockets, ports} = setup_game()
+    {1, [player | _], [socket | _], [port | _]} = extract_player_seq(startmsg, sockets, ports)
     {:ok, {_ip, _port, msg}} = :gen_udp.recv(socket, 0, @timeout)
     [_, token] = Regex.run(~r/YOUR TURN;([0-9a-fA-F]{32})\n/, msg)
     :gen_udp.send(socket, 'localhost', port, "ROLL;#{token}")
-    for s <- [s1, s2, s3], do: :gen_udp.recv(s, 0, @timeout) # PLAYER ROLLS
+    check_broadcast_message(sockets, "PLAYER ROLLS;#{player}\n")
     :gen_udp.recv(socket, 0, @timeout) # ROLLED;<dice>
     Process.sleep(@timeout)
-    check_player_lost_aftermath(player, s1, s2, s3, "DID NOT ANNOUNCE")
+    check_player_lost_aftermath(player, sockets, "DID NOT ANNOUNCE")
   end
 
   test "First player rolls and announces" do
-    {start, {s1, p1}, {s2, p2}, {s3, _p3}} = setup_game()
-    {{socket1, port1}, player1, {socket2, port2}, player2} = extract_player_seq(start, {s1, p1}, {s2, p2})
+    {startmsg, sockets, ports} = setup_game()
+    {1, [player1, player2 | _], [socket1, socket2 | _], [port1, port2 | _]} = extract_player_seq(startmsg, sockets, ports)
     {:ok, {_ip, _port, msg}} = :gen_udp.recv(socket1, 0, @timeout)
     [_, token] = Regex.run(~r/YOUR TURN;([0-9a-fA-F]{32})\n/, msg)
     :gen_udp.send(socket1, 'localhost', port1, "ROLL;#{token}")
-    for s <- [s1, s2, s3], do: :gen_udp.recv(s, 0, @timeout) # PLAYER ROLLS
+    check_broadcast_message(sockets, "PLAYER ROLLS;#{player1}\n")
     {:ok, {_ip, _port, msg}} = :gen_udp.recv(socket1, 0, @timeout)
     [_, token] = Regex.run(~r/ROLLED;[1-6],[1-6];([0-9a-fA-F]{32})/, msg)
     MiaServer.Game.testing_inject_dice(MiaServer.Dice.new(3,1))
     :gen_udp.send(socket1, 'localhost', port1, "ANNOUNCE;3,1;#{token}")
-    # Players announcement is broadcast
-    for s <- [s1, s2, s3] do
-      {:ok, {_ip, _port, msg}} = :gen_udp.recv(s, 0, @timeout)
-      assert msg == "ANNOUNCED;#{player1};3,1\n"
-    end
+    check_broadcast_message(sockets, "ANNOUNCED;#{player1};3,1\n")
     # Second players turn
     assert {:ok, {_ip, _port, msg}} = :gen_udp.recv(socket2, 0, @timeout)
     assert msg =~ ~r/YOUR TURN;([0-9a-fA-F]{32})\n/
     [_, token] = Regex.run(~r/YOUR TURN;([0-9a-fA-F]{32})\n/, msg)
     :gen_udp.send(socket2, 'localhost', port2, "ROLL;#{token}")
-    for s <- [s1, s2, s3], do: :gen_udp.recv(s, 0, @timeout) # PLAYER ROLLS
+    check_broadcast_message(sockets, "PLAYER ROLLS;#{player2}\n")
     {:ok, {_ip, _port, msg}} = :gen_udp.recv(socket2, 0, @timeout)
     [_, token] = Regex.run(~r/ROLLED;[1-6],[1-6];([0-9a-fA-F]{32})/, msg)
     MiaServer.Game.testing_inject_dice(MiaServer.Dice.new(3,2))
     :gen_udp.send(socket2, 'localhost', port2, "ANNOUNCE;4,1;#{token}")
-    # Players announcement is broadcast
-    for s <- [s1, s2, s3] do
-      {:ok, {_ip, _port, msg}} = :gen_udp.recv(s, 0, @timeout)
-      assert msg == "ANNOUNCED;#{player2};4,1\n"
-    end
+    check_broadcast_message(sockets, "ANNOUNCED;#{player2};4,1\n")
     # Again first players turn
     assert {:ok, {_ip, _port, msg}} = :gen_udp.recv(socket1, 0, @timeout)
     assert msg =~ ~r/YOUR TURN;([0-9a-fA-F]{32})\n/
