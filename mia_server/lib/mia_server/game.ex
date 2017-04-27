@@ -82,10 +82,13 @@ defmodule MiaServer.Game do
       dice ->
         {_ip, _port, name} = MiaServer.Playerlist.get_participating_player(state.playerno)
         broadcast_message("ANNOUNCED;#{name};#{dice}")
-        if state.announced != nil and MiaServer.Dice.higher?(state.announced, announced_dice) do
-          {:noreply, player_lost_aftermath(state, "ANNOUNCED LOSING DICE")}
-        else
-          {:noreply, %{state | :state => :round,
+        cond do
+          state.announced != nil and MiaServer.Dice.higher?(state.announced, announced_dice) ->
+            {:noreply, player_lost_aftermath(state, "ANNOUNCED LOSING DICE")}
+          not MiaServer.Dice.mia?(state.dice) and MiaServer.Dice.mia?(announced_dice) ->
+            {:noreply, player_lost_aftermath(state, "LIED ABOUT MIA")}
+          true ->
+            {:noreply, %{state | :state => :round,
                                :playerno => next_playerno(state),
                                :announced => dice,
                                :timer => Process.send_after(self(), :send_your_turn, @timeout)}}

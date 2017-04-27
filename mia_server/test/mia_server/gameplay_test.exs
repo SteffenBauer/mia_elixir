@@ -225,4 +225,24 @@ defmodule MiaServer.GameplayTest do
     check_player_lost_aftermath(player2, sockets, "ANNOUNCED LOSING DICE")
   end
 
+  test "Player announces invalid MIA" do
+    {startmsg, sockets, ports} = setup_game()
+    {1, [player1 | _], [socket1 | _], [port1 | _]} = extract_player_seq(startmsg, sockets, ports)
+    MiaServer.Game.testing_inject_dice(6,1)
+    socket1
+      |> receive_message()
+      |> check_and_gettoken(:yourturn)
+      |> make_roll_msg()
+      |> send_to_server(socket1, port1)
+    check_broadcast_message(sockets, "PLAYER ROLLS;#{player1}\n")
+    socket1
+      |> receive_message()
+      |> check_and_gettoken(:rolled)
+      |> make_announcement_msg(2,1)
+      |> send_to_server(socket1, port1)
+    check_broadcast_message(sockets, "ANNOUNCED;#{player1};2,1\n")
+    check_player_lost_aftermath(player1, sockets, "LIED ABOUT MIA")
+  
+  end
+
 end
