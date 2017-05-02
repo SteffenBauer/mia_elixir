@@ -100,27 +100,36 @@ defmodule MiaServer.GameplayTest do
   defp make_nonsense_msg(token), do: "BLABLA;#{token}"
   defp make_announcement_msg(token, d1, d2), do: "ANNOUNCE;#{d1},#{d2};#{token}"
 
-  test "First player receives Your Turn" do
-    {startmsg, sockets, ports} = setup_game()
-    {turn, _players, [socket | _], _ports} = extract_player_seq(startmsg, sockets, ports)
-    assert turn == 1
-    socket
-      |> receive_message()
-      |> check_and_gettoken(:yourturn)
-  end
-
-  test "First player rolls and receives dice" do
-    {startmsg, sockets, ports} = setup_game()
-    {1, [player | _], [socket | _], [port | _]} = extract_player_seq(startmsg, sockets, ports)
+  defp do_roll(socket, port, player, sockets) do
     socket
       |> receive_message()
       |> check_and_gettoken(:yourturn)
       |> make_roll_msg()
       |> send_to_server(socket, port)
     check_broadcast_message(sockets, "PLAYER ROLLS;#{player}\n")
+  end
+
+  defp do_announcement(socket, port, player, d1, d2, sockets) do
     socket
       |> receive_message()
       |> check_and_gettoken(:rolled)
+      |> make_announcement_msg(d1,d2)
+      |> send_to_server(socket, port)
+    check_broadcast_message(sockets, "ANNOUNCED;#{player};#{d1},#{d2}\n")
+  end
+
+  test "First player receives Your Turn" do
+    {startmsg, sockets, ports} = setup_game()
+    {turn, _players, [socket | _], _ports} = extract_player_seq(startmsg, sockets, ports)
+    assert turn == 1
+    socket |> receive_message() |> check_and_gettoken(:yourturn)
+  end
+
+  test "First player rolls and receives dice" do
+    {startmsg, sockets, ports} = setup_game()
+    {1, [player | _], [socket | _], [port | _]} = extract_player_seq(startmsg, sockets, ports)
+    do_roll(socket, port, player, sockets)
+    socket |> receive_message() |> check_and_gettoken(:rolled)
   end
 
   test "First player does nothing" do
@@ -145,12 +154,7 @@ defmodule MiaServer.GameplayTest do
   test "Player rolls but fails to announce" do
     {startmsg, sockets, ports} = setup_game()
     {1, [player | _], [socket | _], [port | _]} = extract_player_seq(startmsg, sockets, ports)
-    socket
-      |> receive_message()
-      |> check_and_gettoken(:yourturn)
-      |> make_roll_msg()
-      |> send_to_server(socket, port)
-    check_broadcast_message(sockets, "PLAYER ROLLS;#{player}\n")
+    do_roll(socket, port, player, sockets)
     receive_message(socket)
     Process.sleep(@timeout)
     check_player_lost_aftermath(player, sockets, "DID NOT ANNOUNCE")
@@ -160,68 +164,26 @@ defmodule MiaServer.GameplayTest do
     {startmsg, sockets, ports} = setup_game()
     {1, [player1, player2 | _], [socket1, socket2 | _], [port1, port2 | _]} = extract_player_seq(startmsg, sockets, ports)
     MiaServer.Game.testing_inject_dice(3,1)
-    socket1
-      |> receive_message()
-      |> check_and_gettoken(:yourturn)
-      |> make_roll_msg()
-      |> send_to_server(socket1, port1)
-    check_broadcast_message(sockets, "PLAYER ROLLS;#{player1}\n")
-    socket1
-      |> receive_message()
-      |> check_and_gettoken(:rolled)
-      |> make_announcement_msg(3,1)
-      |> send_to_server(socket1, port1)
-    check_broadcast_message(sockets, "ANNOUNCED;#{player1};3,1\n")
+    do_roll(socket1, port1, player1, sockets)
+    do_announcement(socket1, port1, player1, 3, 1, sockets)
     # Second players turn
     MiaServer.Game.testing_inject_dice(3,2)
-    socket2
-      |> receive_message()
-      |> check_and_gettoken(:yourturn)
-      |> make_roll_msg()
-      |> send_to_server(socket2, port2)
-    check_broadcast_message(sockets, "PLAYER ROLLS;#{player2}\n")
-    socket2
-      |> receive_message()
-      |> check_and_gettoken(:rolled)
-      |> make_announcement_msg(4,1)
-      |> send_to_server(socket2, port2)
-    check_broadcast_message(sockets, "ANNOUNCED;#{player2};4,1\n")
+    do_roll(socket2, port2, player2, sockets)
+    do_announcement(socket2, port2, player2, 4, 1, sockets)
     # Again first players turn
-    socket1
-      |> receive_message()
-      |> check_and_gettoken(:yourturn)
+    socket1 |> receive_message() |> check_and_gettoken(:yourturn)
   end
 
   test "Player announces lower dice" do
     {startmsg, sockets, ports} = setup_game()
     {1, [player1, player2 | _], [socket1, socket2 | _], [port1, port2 | _]} = extract_player_seq(startmsg, sockets, ports)
     MiaServer.Game.testing_inject_dice(6,1)
-    socket1
-      |> receive_message()
-      |> check_and_gettoken(:yourturn)
-      |> make_roll_msg()
-      |> send_to_server(socket1, port1)
-    check_broadcast_message(sockets, "PLAYER ROLLS;#{player1}\n")
-    socket1
-      |> receive_message()
-      |> check_and_gettoken(:rolled)
-      |> make_announcement_msg(6,1)
-      |> send_to_server(socket1, port1)
-    check_broadcast_message(sockets, "ANNOUNCED;#{player1};6,1\n")
+    do_roll(socket1, port1, player1, sockets)
+    do_announcement(socket1, port1, player1, 6, 1, sockets)
     # Second players turn
     MiaServer.Game.testing_inject_dice(3,2)
-    socket2
-      |> receive_message()
-      |> check_and_gettoken(:yourturn)
-      |> make_roll_msg()
-      |> send_to_server(socket2, port2)
-    check_broadcast_message(sockets, "PLAYER ROLLS;#{player2}\n")
-    socket2
-      |> receive_message()
-      |> check_and_gettoken(:rolled)
-      |> make_announcement_msg(5,1)
-      |> send_to_server(socket2, port2)
-    check_broadcast_message(sockets, "ANNOUNCED;#{player2};5,1\n")
+    do_roll(socket2, port2, player2, sockets)
+    do_announcement(socket2, port2, player2, 5, 1, sockets)
     check_player_lost_aftermath(player2, sockets, "ANNOUNCED LOSING DICE")
   end
 
@@ -229,20 +191,9 @@ defmodule MiaServer.GameplayTest do
     {startmsg, sockets, ports} = setup_game()
     {1, [player1 | _], [socket1 | _], [port1 | _]} = extract_player_seq(startmsg, sockets, ports)
     MiaServer.Game.testing_inject_dice(6,1)
-    socket1
-      |> receive_message()
-      |> check_and_gettoken(:yourturn)
-      |> make_roll_msg()
-      |> send_to_server(socket1, port1)
-    check_broadcast_message(sockets, "PLAYER ROLLS;#{player1}\n")
-    socket1
-      |> receive_message()
-      |> check_and_gettoken(:rolled)
-      |> make_announcement_msg(2,1)
-      |> send_to_server(socket1, port1)
-    check_broadcast_message(sockets, "ANNOUNCED;#{player1};2,1\n")
+    do_roll(socket1, port1, player1, sockets)
+    do_announcement(socket1, port1, player1, 2, 1, sockets)
     check_player_lost_aftermath(player1, sockets, "LIED ABOUT MIA")
-  
   end
 
 end
