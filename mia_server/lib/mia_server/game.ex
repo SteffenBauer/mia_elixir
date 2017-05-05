@@ -73,7 +73,7 @@ defmodule MiaServer.Game do
       state.dice == nil -> 
         {:noreply, player_lost_aftermath(state, "SEE BEFORE FIRST ROLL")}
       MiaServer.Dice.higher?(state.announced, state.dice) ->
-        {:noreply, state}
+        {:noreply, player_lost_aftermath(%{state | :playerno => prev_playerno(state)}, "CAUGHT BLUFFING")}
       true ->
         {:noreply, player_lost_aftermath(state, "SEE FAILED")}
     end
@@ -250,6 +250,11 @@ defmodule MiaServer.Game do
   defp next_playerno(state) do
     numplayers = MiaServer.Playerlist.get_participating_number()
     if state.playerno >= numplayers-1, do: 0, else: state.playerno+1
+  end
+
+  defp prev_playerno(state) do
+    numplayers = MiaServer.Playerlist.get_participating_number()
+    if state.playerno == 0, do: numplayers-1, else: state.playerno-1
   end
 
   defp playerstring(playerlist) do

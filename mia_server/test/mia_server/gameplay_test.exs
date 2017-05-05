@@ -233,4 +233,16 @@ defmodule MiaServer.GameplayTest do
     check_player_lost_aftermath(player2, sockets, "SEE FAILED")
   end
 
+  test "Player wants to see, and previous player bluffed" do
+    {startmsg, sockets, ports} = setup_game()
+    {1, [player1, player2 | _], [socket1, socket2 | _], [port1, port2 | _]} = extract_player_seq(startmsg, sockets, ports)
+    MiaServer.Game.testing_inject_dice(5,1)
+    do_roll(socket1, port1, player1, sockets)
+    do_announcement(socket1, port1, player1, 6, 1, sockets)
+    # Second players turn
+    do_see(socket2, port2, player2, sockets)
+    check_player_lost_aftermath(player1, sockets, "CAUGHT BLUFFING")
+  end
+
+
 end
