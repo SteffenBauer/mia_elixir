@@ -99,7 +99,8 @@ defmodule MiaServer.GameplayTest do
   defp make_roll_msg(token), do: "ROLL;#{token}"
   defp make_nonsense_msg(token), do: "BLABLA;#{token}"
   defp make_announcement_msg(token, d1, d2), do: "ANNOUNCE;#{d1},#{d2};#{token}"
-
+  defp make_see_msg(token), do: "SEE;#{token}"
+  
   defp do_roll(socket, port, player, sockets) do
     socket
       |> receive_message()
@@ -203,6 +204,18 @@ defmodule MiaServer.GameplayTest do
     do_roll(socket1, port1, player1, sockets)
     do_announcement(socket1, port1, player1, 2, 1, sockets)
     check_player_lost_aftermath(player2, sockets, "MIA")
+  end
+  
+  test "Player wants to see, but no previous roll was made" do
+    {startmsg, sockets, ports} = setup_game()
+    {1, [player | _], [socket | _], [port | _]} = extract_player_seq(startmsg, sockets, ports)
+    socket
+      |> receive_message()
+      |> check_and_gettoken(:yourturn)
+      |> make_see_msg()
+      |> send_to_server(socket, port)
+    check_broadcast_message(sockets, "PLAYER WANTS TO SEE;#{player}\n")
+    check_player_lost_aftermath(player, sockets, "SEE BEFORE FIRST ROLL")
   end
 
 end
