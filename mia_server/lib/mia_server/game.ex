@@ -87,6 +87,8 @@ defmodule MiaServer.Game do
             {:noreply, player_lost_aftermath(state, "ANNOUNCED LOSING DICE")}
           not MiaServer.Dice.mia?(state.dice) and MiaServer.Dice.mia?(announced_dice) ->
             {:noreply, player_lost_aftermath(state, "LIED ABOUT MIA")}
+          MiaServer.Dice.mia?(state.dice) and MiaServer.Dice.mia?(announced_dice) ->
+            {:noreply, player_won_aftermath(state, "MIA")}
           true ->
             {:noreply, %{state | :state => :round,
                                :playerno => next_playerno(state),
@@ -196,6 +198,18 @@ defmodule MiaServer.Game do
     {_ip, _port, name} = MiaServer.Playerlist.get_participating_player(state.playerno)
     broadcast_message("PLAYER LOST;#{name};#{reason}")
     update_score(state.playerno, :lost)
+    get_scoremsg() |> broadcast_message()
+    %MiaServer.Game{:round => state.round+1, :timer => Process.send_after(self(), :check_registry, @timeout)}
+  end
+
+  defp player_won_aftermath(state, reason) do
+    Process.cancel_timer(state.timer)
+    players = for pn <- 0..MiaServer.Playerlist.get_participating_number()-1, pn != state.playerno do
+      {_i, _p, name} = MiaServer.Playerlist.get_participating_player(pn)
+      name
+    end
+    broadcast_message("PLAYER LOST;" <> Enum.join(players,",") <> ";#{reason}")
+    update_score(state.playerno, :won)
     get_scoremsg() |> broadcast_message()
     %MiaServer.Game{:round => state.round+1, :timer => Process.send_after(self(), :check_registry, @timeout)}
   end

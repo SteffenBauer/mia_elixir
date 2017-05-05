@@ -196,4 +196,13 @@ defmodule MiaServer.GameplayTest do
     check_player_lost_aftermath(player1, sockets, "LIED ABOUT MIA")
   end
 
+  test "Player announces valid MIA" do
+    {startmsg, sockets, ports} = setup_game()
+    {1, [player1, player2 | _], [socket1 | _], [port1 | _]} = extract_player_seq(startmsg, sockets, ports)
+    MiaServer.Game.testing_inject_dice(2,1)
+    do_roll(socket1, port1, player1, sockets)
+    do_announcement(socket1, port1, player1, 2, 1, sockets)
+    check_player_lost_aftermath(player2, sockets, "MIA")
+  end
+
 end
