@@ -67,11 +67,15 @@ defmodule MiaServer.Game do
 
   def handle_cast({:player_sees, token}, %{:state => :round, :token => token} = state) do
     Process.cancel_timer(state.timer)
-    {ip, port, name} = MiaServer.Playerlist.get_participating_player(state.playerno)
+    {_ip, _port, name} = MiaServer.Playerlist.get_participating_player(state.playerno)
     broadcast_message("PLAYER WANTS TO SEE;#{name}")
-    case state.dice do
-      nil -> {:noreply, player_lost_aftermath(state, "SEE BEFORE FIRST ROLL")}
-      _ -> {:noreply, state}
+    cond do
+      state.dice == nil -> 
+        {:noreply, player_lost_aftermath(state, "SEE BEFORE FIRST ROLL")}
+      MiaServer.Dice.higher?(state.announced, state.dice) ->
+        {:noreply, state}
+      true ->
+        {:noreply, player_lost_aftermath(state, "SEE FAILED")}
     end
   end
 

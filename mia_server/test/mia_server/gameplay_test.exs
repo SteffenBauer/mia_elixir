@@ -101,6 +101,15 @@ defmodule MiaServer.GameplayTest do
   defp make_announcement_msg(token, d1, d2), do: "ANNOUNCE;#{d1},#{d2};#{token}"
   defp make_see_msg(token), do: "SEE;#{token}"
   
+  defp do_see(socket, port, player, sockets) do
+    socket
+      |> receive_message()
+      |> check_and_gettoken(:yourturn)
+      |> make_see_msg()
+      |> send_to_server(socket, port)
+    check_broadcast_message(sockets, "PLAYER WANTS TO SEE;#{player}\n")
+  end
+  
   defp do_roll(socket, port, player, sockets) do
     socket
       |> receive_message()
@@ -209,13 +218,19 @@ defmodule MiaServer.GameplayTest do
   test "Player wants to see, but no previous roll was made" do
     {startmsg, sockets, ports} = setup_game()
     {1, [player | _], [socket | _], [port | _]} = extract_player_seq(startmsg, sockets, ports)
-    socket
-      |> receive_message()
-      |> check_and_gettoken(:yourturn)
-      |> make_see_msg()
-      |> send_to_server(socket, port)
-    check_broadcast_message(sockets, "PLAYER WANTS TO SEE;#{player}\n")
+    do_see(socket, port, player, sockets)
     check_player_lost_aftermath(player, sockets, "SEE BEFORE FIRST ROLL")
+  end
+
+  test "Player wants to see, but roll was correctly annnounced" do
+    {startmsg, sockets, ports} = setup_game()
+    {1, [player1, player2 | _], [socket1, socket2 | _], [port1, port2 | _]} = extract_player_seq(startmsg, sockets, ports)
+    MiaServer.Game.testing_inject_dice(6,1)
+    do_roll(socket1, port1, player1, sockets)
+    do_announcement(socket1, port1, player1, 5, 1, sockets)
+    # Second players turn
+    do_see(socket2, port2, player2, sockets)
+    check_player_lost_aftermath(player2, sockets, "SEE FAILED")
   end
 
 end

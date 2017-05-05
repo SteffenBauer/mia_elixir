@@ -1,7 +1,7 @@
 use Mix.Config
 
 config :mia_server,
-  timeout: 10
+  timeout: 25
 
 config :logger,
   level: :warn
