@@ -67,9 +67,9 @@ defmodule MiaServer.GameplayTest do
   end
 
   defp setup_game() do
-    {socket1, port1} = open_udp_socket({127,0,0,1})
-    {socket2, port2} = open_udp_socket({127,0,0,2})
-    {socket3, port3} = open_udp_socket({127,0,0,3})
+    {socket1, port1} = open_udp_socket({127,0,0,2})
+    {socket2, port2} = open_udp_socket({127,0,0,3})
+    {socket3, port3} = open_udp_socket({127,0,0,4})
     send_and_recv("REGISTER;player1", socket1, port1)
     send_and_recv("REGISTER;player2", socket2, port2)
     send_and_recv("REGISTER_SPECTATOR", socket3, port3)

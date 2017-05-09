@@ -54,10 +54,8 @@ defmodule MiaServer.Registry do
   end
 
   def handle_cast({:incrscore, name}, registry) do
-    entry = registry |> :ets.match({:"$1", :"$2", {:player, name, :"$3"}})
-    case entry do
-      [[ip, port, score]] -> registry |> :ets.insert({ip, port, {:player, name, score+1}})
-    end
+    [[ip, port, score]] = registry |> :ets.match({:"$1", :"$2", {:player, name, :"$3"}})
+    registry |> :ets.insert({ip, port, {:player, name, score+1}})
     {:noreply, registry}
   end
 

@@ -1,7 +1,7 @@
 defmodule MiaServer.Dice do
   defstruct die1: nil, die2: nil
 
-  def new(die1, die2) when die1 < 1 or die1 > 6 or die2 < 1 or die2 > 6, do: :invalid
+  def new(die1, die2) when not die1 in 1..6 or not die2 in 1..6, do: :invalid
   def new(die1, die2) when die1 > die2, do: %MiaServer.Dice{die1: die1, die2: die2}
   def new(die1, die2),                  do: %MiaServer.Dice{die1: die2, die2: die1}
 
