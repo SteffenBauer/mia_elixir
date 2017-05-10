@@ -212,6 +212,17 @@ defmodule MiaServer.GameplayTest do
     player_lost(game, 1, "DID NOT ANNOUNCE")
   end
 
+  test "Player announces without having rolled" do
+    game = setup_game()
+    player = game[:players][1]
+    player[:socket]
+      |> receive_message()
+      |> check_and_gettoken(:yourturn)
+      |> make_announcement_msg(2,1)
+      |> send_to_server(player[:socket], player[:port])
+    player_lost(game, 1, "INVALID TURN")
+  end
+
   test "Game round with consecutive announcements" do
     setup_game()
       |> inject_dice({3,1})

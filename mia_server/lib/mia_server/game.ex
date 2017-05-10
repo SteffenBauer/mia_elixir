@@ -1,10 +1,10 @@
 defmodule MiaServer.Game do
-  use GenServer
+  @behaviour :gen_statem
   require Logger
 
-  defstruct state: :wait_for_registrations,
-            round: 1,
-            playerno: nil,
+  defstruct round: 1,
+            playerno: 0,
+            playerip: nil,
             token: nil,
             action: nil,
             timer: nil,
@@ -14,103 +14,91 @@ defmodule MiaServer.Game do
 
   @timeout Application.get_env(:mia_server, :timeout)
 
-  def start_link() do
-    GenServer.start_link(__MODULE__, :ok, [name: __MODULE__])
-  end
+  def start_link(), do: :gen_statem.start_link({:local, __MODULE__}, __MODULE__, [], [])
+  def stop(), do: :gen_statem.stop(__MODULE__)
 
 ## API
 
   def register_join(ip, port, token) do
-    GenServer.cast(__MODULE__, {:join, ip, port, token})
+    :gen_statem.cast(__MODULE__, {:join, ip, port, token})
   end
 
   def do_roll(token) do
-    GenServer.cast(__MODULE__, {:player_rolls, token})
+    :gen_statem.cast(__MODULE__, {:player_rolls, token})
   end
 
   def do_announce(d1, d2, token) do
-    GenServer.cast(__MODULE__, {:player_announces, d1, d2, token})
+    :gen_statem.cast(__MODULE__, {:player_announces, d1, d2, token})
   end
 
   def do_see(token) do
-    GenServer.cast(__MODULE__, {:player_sees, token})
+    :gen_statem.cast(__MODULE__, {:player_sees, token})
   end
 
   def invalid(ip, port, msg) do
-    GenServer.cast(__MODULE__, {:invalid, ip, port, msg})
+    :gen_statem.cast(__MODULE__, {:invalid, ip, port, msg})
   end
 
   def testing_inject_dice(d1, d2) do
-    GenServer.cast(__MODULE__, {:inject, d1, d2})
+    :gen_statem.cast(__MODULE__, {:inject, d1, d2})
   end
 
-## GenServer Callbacks
+## gen_statem Callbacks
 
-  def init(:ok) do
+  def init([]) do
     Logger.info "Starting MIA game machine"
-    {:ok, %MiaServer.Game{:timer => Process.send_after(self(), :check_registry, @timeout)} }
+    {:ok, :wait_for_registrations, %MiaServer.Game{}, {:state_timeout, @timeout, :check_registry}}
   end
+  def terminate(_reason, _state, _sata), do: nil
+  def code_change(_vsn, state, data, _extra), do: {:ok, state, data}
+  def callback_mode(), do: :handle_event_function
 
-  def handle_cast({:join, ip, port, token}, %{:state => :wait_for_joins} = state) do
-    MiaServer.Playerlist.join_player(ip, port, token)
-    {:noreply, state}
-  end
+  def handle_event(type, event, state, data) do
+    currenttoken = data.token
+    currentaction = data.action
+    currentip = data.playerip
+    case {type, event, state} do
+      {:cast, {:join, ip, port, token}, :wait_for_joins} ->
+        MiaServer.Playerlist.join_player(ip, port, token)
+        {:keep_state, data}
+      {:cast, {:invalid, ^currentip, _port, _msg}, :round} ->
+        data = player_lost_aftermath(data, "INVALID TURN")
+        {:next_state, :wait_for_registrations, data, {:state_timeout, @timeout, :check_registry}}
+      {:cast, {:player_sees, ^currenttoken}, :round} ->
+        {:next_state, :wait_for_registrations, handle_see(data), {:state_timeout, @timeout, :check_registry}}
+      {:cast, {:player_rolls, ^currenttoken}, :round} ->
+        {:keep_state, %{data | :action => :rolls}}
+      {:cast, {:inject, d1, d2}, :round} ->
+        Logger.debug("Inject: Next die roll will be #{d1},#{d2}")
+        {:keep_state, %{data | :injected => MiaServer.Dice.new(d1, d2)}}
+      {:cast, {:player_announces, d1, d2, ^currenttoken}, :wait_for_announce} ->
+        {state, data, timeout} = handle_announce(data, d1, d2)
+        {:next_state, state, data, {:state_timeout, @timeout, timeout}}
+      {:cast, {:player_announces, _, _, ^currenttoken}, _state} ->
+        data = player_lost_aftermath(data, "INVALID TURN")
+        {:next_state, :wait_for_registrations, data, {:state_timeout, @timeout, :check_registry}}
 
-  def handle_cast({:player_sees, token}, %{:state => :round, :token => token} = state) do
-    Process.cancel_timer(state.timer)
-    {:noreply, handle_see(state)}
-  end
+      {:state_timeout, :check_registry, :wait_for_registrations} ->
+        {state, timeout} = check_registry()
+        {:next_state, state, data, {:state_timeout, @timeout, timeout}}
+      {:state_timeout, :check_joins, :wait_for_joins} ->
+        {state, timeout} = check_joins(data)
+        {:next_state, state, data, {:state_timeout, @timeout, timeout}}
+      {:state_timeout, :send_your_turn, :round} ->
+        data = send_your_turn(data)
+        {:next_state, :round, data, {:state_timeout, @timeout, :check_action}}
+      {:state_timeout, :check_action, :round} when currentaction == :rolls ->
+        data = handle_roll(data)
+        {:next_state, :wait_for_announce, data, {:state_timeout, @timeout, :check_for_announcement}}
+      {:state_timeout, :check_action, :round} when currentaction == nil ->
+        data = player_lost_aftermath(data, "DID NOT TAKE TURN")
+        {:next_state, :wait_for_registrations, data, {:state_timeout, @timeout, :check_registry}}
+      {:state_timeout, :check_for_announcement, :wait_for_announce} when currentaction == nil ->
+        data = player_lost_aftermath(data, "DID NOT ANNOUNCE")
+        {:next_state, :wait_for_registrations, data, {:state_timeout, @timeout, :check_registry}}
 
-  def handle_cast({:player_rolls, token}, %{:state => :round, :token => token} = state) do
-    {:noreply, %{state | :action => :rolls}}
-  end
-
-  def handle_cast({:player_announces, _, _, token}, %{:token => token, :dice => nil} = state) do
-    {:noreply, player_lost_aftermath(state, "INVALID TURN")}
-  end
-
-  def handle_cast({:player_announces, d1, d2, token}, %{:state => :wait_for_announce, :token => token} = state) do
-    Process.cancel_timer(state.timer)
-    {:noreply, handle_announce(state, d1, d2)}
-  end
-
-  def handle_cast({:invalid, ip, _port, _msg}, %{:state => :round} = state) do
-    {ipp, _portp, _name} = MiaServer.Playerlist.get_participating_player(state.playerno)
-    {:noreply, if(ip == ipp, do: player_lost_aftermath(state, "INVALID TURN"), else: state)}
-  end
-
-  def handle_cast({:inject, d1, d2}, state) do
-    Logger.debug("Inject: Next die roll will be #{d1},#{d2}")
-    {:noreply, %{state | :injected => MiaServer.Dice.new(d1, d2)}}
-  end
-
-  ## Timeouted events
-  def handle_info(:check_registry, %{:state => :wait_for_registrations} = state) do
-    Process.cancel_timer(state.timer)
-    {:noreply, check_registry(state)}
-  end
-
-  def handle_info(:check_joins, %{:state => :wait_for_joins} = state) do
-    Process.cancel_timer(state.timer)
-    {:noreply, check_joins(state)}
-  end
-
-  def handle_info(:send_your_turn, %{:state => :round} = state) do
-    Process.cancel_timer(state.timer)
-    {:noreply, send_your_turn(state)}
-  end
-
-  def handle_info(:check_action, %{:state => :round, :action => nil} = state) do
-    {:noreply, player_lost_aftermath(state, "DID NOT TAKE TURN")}
-  end
-
-  def handle_info(:check_action, %{:state => :round, :action => :rolls} = state) do
-    Process.cancel_timer(state.timer)
-    {:noreply, handle_roll(state)}
-  end
-
-  def handle_info(:check_announcement, %{:state => :wait_for_announce, :action => nil} = state) do
-    {:noreply, player_lost_aftermath(state, "DID NOT ANNOUNCE")}
+      other -> Logger.warn "MiaGame got #{inspect other}, ignoring"; :keep_state_and_data
+    end
   end
 
 ## Private helper functions
@@ -156,17 +144,15 @@ defmodule MiaServer.Game do
     "SCORE;" <> scores
   end
 
-  defp player_lost_aftermath(state, reason) do
-    Process.cancel_timer(state.timer)
-    {_ip, _port, name} = MiaServer.Playerlist.get_participating_player(state.playerno)
+  defp player_lost_aftermath(data, reason) do
+    {_ip, _port, name} = MiaServer.Playerlist.get_participating_player(data.playerno)
     broadcast_message("PLAYER LOST;#{name};#{reason}")
-    update_score(state.playerno, :lost)
+    update_score(data.playerno, :lost)
     get_scoremsg() |> broadcast_message()
-    %MiaServer.Game{:round => state.round+1, :timer => Process.send_after(self(), :check_registry, @timeout)}
+    %MiaServer.Game{:round => data.round+1}
   end
 
   defp player_won_aftermath(state, reason) do
-    Process.cancel_timer(state.timer)
     players = for pn <- 0..MiaServer.Playerlist.get_participating_number()-1, pn != state.playerno do
       {_i, _p, name} = MiaServer.Playerlist.get_participating_player(pn)
       name
@@ -174,7 +160,7 @@ defmodule MiaServer.Game do
     broadcast_message("PLAYER LOST;" <> Enum.join(players,",") <> ";#{reason}")
     update_score(state.playerno, :won)
     get_scoremsg() |> broadcast_message()
-    %MiaServer.Game{:round => state.round+1, :timer => Process.send_after(self(), :check_registry, @timeout)}
+    %MiaServer.Game{:round => state.round+1}
   end
 
   defp handle_see(state) do
@@ -190,82 +176,72 @@ defmodule MiaServer.Game do
     end
   end
 
-  defp handle_announce(state, d1, d2) do
+  defp handle_announce(data, d1, d2) do
     case MiaServer.Dice.new(d1, d2) do
       :invalid ->
-        player_lost_aftermath(state, "INVALID TURN")
+        {:wait_for_registrations, player_lost_aftermath(data, "INVALID TURN"), :check_registry}
       announced_dice ->
-        {_ip, _port, name} = MiaServer.Playerlist.get_participating_player(state.playerno)
+        {_ip, _port, name} = MiaServer.Playerlist.get_participating_player(data.playerno)
         broadcast_message("ANNOUNCED;#{name};#{announced_dice}")
         cond do
-          state.announced != nil and MiaServer.Dice.higher?(state.announced, announced_dice) ->
-            player_lost_aftermath(state, "ANNOUNCED LOSING DICE")
-          not MiaServer.Dice.mia?(state.dice) and MiaServer.Dice.mia?(announced_dice) ->
-            player_lost_aftermath(state, "LIED ABOUT MIA")
-          MiaServer.Dice.mia?(state.dice) and MiaServer.Dice.mia?(announced_dice) ->
-            player_won_aftermath(state, "MIA")
+          data.announced != nil and MiaServer.Dice.higher?(data.announced, announced_dice) ->
+            {:wait_for_registrations, player_lost_aftermath(data, "ANNOUNCED LOSING DICE"), :check_registry}
+          not MiaServer.Dice.mia?(data.dice) and MiaServer.Dice.mia?(announced_dice) ->
+            {:wait_for_registrations, player_lost_aftermath(data, "LIED ABOUT MIA"), :check_registry}
+          MiaServer.Dice.mia?(data.dice) and MiaServer.Dice.mia?(announced_dice) ->
+            {:wait_for_registrations, player_won_aftermath(data, "MIA"), :check_registry}
           true ->
-            %{state | :state => :round,
-                      :playerno => next_playerno(state),
-                      :announced => announced_dice,
-                      :timer => Process.send_after(self(), :send_your_turn, @timeout)}
+            {:round,
+            %{data | :playerno => next_playerno(data), :announced => announced_dice},
+            :send_your_turn}
         end
     end
   end
 
-  defp check_registry(state) do
+  defp check_registry() do
     registered_participants = MiaServer.Registry.get_registered()
     registered_players = registered_participants
       |> Enum.filter(fn [_, _, role] -> role == :player end)
-    {nextstate, timer} = cond do
+    cond do
       length(registered_players) > 1 ->
         send_invitations(registered_participants)
-        {:wait_for_joins, Process.send_after(self(), :check_joins, @timeout)}
+        {:wait_for_joins, :check_joins}
       true ->
-        {:wait_for_registrations, Process.send_after(self(), :check_registry, @timeout)}
+        {:wait_for_registrations, :check_registry}
     end
-    %{state | :state => nextstate, :timer => timer}
   end
 
-  defp check_joins(state) do
+  defp check_joins(data) do
     joined_players = MiaServer.Playerlist.get_joined_players()
-    {reply, state, next} = case length(joined_players) do
-      0 -> {"ROUND CANCELED;NO PLAYERS", %{state | :state => :wait_for_registrations}, :check_registry}
-      1 -> {"ROUND CANCELED;ONLY ONE PLAYER", %{state | :state => :wait_for_registrations}, :check_registry}
+    {reply, nextstate, nexttimeout} = case length(joined_players) do
+      0 -> {"ROUND CANCELED;NO PLAYERS", :wait_for_registrations, :check_registry}
+      1 -> {"ROUND CANCELED;ONLY ONE PLAYER", :wait_for_registrations, :check_registry}
       _ -> playerlist = generate_playerlist(joined_players)
              |> store_playerlist()
              |> playerstring()
-           {"ROUND STARTED;#{state.round};#{playerlist}", %{state | :state => :round, :playerno => 0}, :send_your_turn}
+           {"ROUND STARTED;#{data.round};#{playerlist}", :round, :send_your_turn}
     end
     broadcast_message(reply)
-    %{state | :timer => Process.send_after(self(), next, @timeout)}
+    {nextstate, nexttimeout}
   end
 
-  defp handle_roll(state) do
-    {ip, port, name} = MiaServer.Playerlist.get_participating_player(state.playerno)
+  defp handle_roll(data) do
+    {ip, port, name} = MiaServer.Playerlist.get_participating_player(data.playerno)
     broadcast_message("PLAYER ROLLS;#{name}")
-    dice = case state.injected do
+    dice = case data.injected do
       nil -> MiaServer.DiceRoller.roll()
       injected -> injected
     end
     token = uuid()
-    reply = "ROLLED;#{dice};#{token}"
-    MiaServer.UDP.reply(ip, port, reply)
-    %{state | :state => :wait_for_announce,
-              :token => token,
-              :action => nil,
-              :dice => dice,
-              :injected => nil,
-              :timer => Process.send_after(self(), :check_announcement, @timeout)}
+    MiaServer.UDP.reply(ip, port, "ROLLED;#{dice};#{token}")
+    %{data | :token => token, :action => nil, :dice => dice, :injected => nil}
   end
 
-  defp send_your_turn(state) do
-    {ip, port, _name} = MiaServer.Playerlist.get_participating_player(state.playerno)
+  defp send_your_turn(data) do
+    {ip, port, _name} = MiaServer.Playerlist.get_participating_player(data.playerno)
     token = uuid()
     MiaServer.UDP.reply(ip, port, "YOUR TURN;#{token}")
-    %{state | :token => token,
-              :action => nil,
-              :timer => Process.send_after(self(), :check_action, @timeout)}
+    %{data | :token => token, :action => nil, :playerip => ip}
   end
 
   defp uuid() do
