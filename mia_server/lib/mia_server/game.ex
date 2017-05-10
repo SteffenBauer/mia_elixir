@@ -7,7 +7,6 @@ defmodule MiaServer.Game do
             playerip: nil,
             token: nil,
             action: nil,
-            timer: nil,
             dice: nil,
             announced: nil,
             injected: nil
@@ -60,10 +59,9 @@ defmodule MiaServer.Game do
     case {type, event, state} do
       {:cast, {:join, ip, port, token}, :wait_for_joins} ->
         MiaServer.Playerlist.join_player(ip, port, token)
-        {:keep_state, data}
+        :keep_state_and_data
       {:cast, {:invalid, ^currentip, _port, _msg}, :round} ->
-        data = player_lost_aftermath(data, "INVALID TURN")
-        {:next_state, :wait_for_registrations, data, {:state_timeout, @timeout, :check_registry}}
+        {:next_state, :wait_for_registrations, player_lost(data, "INVALID TURN"), {:state_timeout, @timeout, :check_registry}}
       {:cast, {:player_sees, ^currenttoken}, :round} ->
         {:next_state, :wait_for_registrations, handle_see(data), {:state_timeout, @timeout, :check_registry}}
       {:cast, {:player_rolls, ^currenttoken}, :round} ->
@@ -75,8 +73,7 @@ defmodule MiaServer.Game do
         {state, data, timeout} = handle_announce(data, d1, d2)
         {:next_state, state, data, {:state_timeout, @timeout, timeout}}
       {:cast, {:player_announces, _, _, ^currenttoken}, _state} ->
-        data = player_lost_aftermath(data, "INVALID TURN")
-        {:next_state, :wait_for_registrations, data, {:state_timeout, @timeout, :check_registry}}
+        {:next_state, :wait_for_registrations, player_lost(data, "INVALID TURN"), {:state_timeout, @timeout, :check_registry}}
 
       {:state_timeout, :check_registry, :wait_for_registrations} ->
         {state, timeout} = check_registry()
@@ -91,10 +88,10 @@ defmodule MiaServer.Game do
         data = handle_roll(data)
         {:next_state, :wait_for_announce, data, {:state_timeout, @timeout, :check_for_announcement}}
       {:state_timeout, :check_action, :round} when currentaction == nil ->
-        data = player_lost_aftermath(data, "DID NOT TAKE TURN")
+        data = player_lost(data, "DID NOT TAKE TURN")
         {:next_state, :wait_for_registrations, data, {:state_timeout, @timeout, :check_registry}}
       {:state_timeout, :check_for_announcement, :wait_for_announce} when currentaction == nil ->
-        data = player_lost_aftermath(data, "DID NOT ANNOUNCE")
+        data = player_lost(data, "DID NOT ANNOUNCE")
         {:next_state, :wait_for_registrations, data, {:state_timeout, @timeout, :check_registry}}
 
       other -> Logger.warn "MiaGame got #{inspect other}, ignoring"; :keep_state_and_data
@@ -130,7 +127,6 @@ defmodule MiaServer.Game do
       MiaServer.Registry.increase_score(name)
     end
   end
-
   defp update_score(playerno, :won) do
     {_ip, _port, name} = MiaServer.Playerlist.get_participating_player(playerno)
     MiaServer.Registry.increase_score(name)
@@ -144,7 +140,7 @@ defmodule MiaServer.Game do
     "SCORE;" <> scores
   end
 
-  defp player_lost_aftermath(data, reason) do
+  defp player_lost(data, reason) do
     {_ip, _port, name} = MiaServer.Playerlist.get_participating_player(data.playerno)
     broadcast_message("PLAYER LOST;#{name};#{reason}")
     update_score(data.playerno, :lost)
@@ -152,48 +148,46 @@ defmodule MiaServer.Game do
     %MiaServer.Game{:round => data.round+1}
   end
 
-  defp player_won_aftermath(state, reason) do
-    players = for pn <- 0..MiaServer.Playerlist.get_participating_number()-1, pn != state.playerno do
+  defp player_won(data, reason) do
+    players = for pn <- 0..MiaServer.Playerlist.get_participating_number()-1, pn != data.playerno do
       {_i, _p, name} = MiaServer.Playerlist.get_participating_player(pn)
       name
     end
     broadcast_message("PLAYER LOST;" <> Enum.join(players,",") <> ";#{reason}")
-    update_score(state.playerno, :won)
+    update_score(data.playerno, :won)
     get_scoremsg() |> broadcast_message()
-    %MiaServer.Game{:round => state.round+1}
+    %MiaServer.Game{:round => data.round+1}
   end
 
-  defp handle_see(state) do
-    {_ip, _port, name} = MiaServer.Playerlist.get_participating_player(state.playerno)
+  defp handle_see(data) do
+    {_ip, _port, name} = MiaServer.Playerlist.get_participating_player(data.playerno)
     broadcast_message("PLAYER WANTS TO SEE;#{name}")
     cond do
-      state.dice == nil ->
-        player_lost_aftermath(state, "SEE BEFORE FIRST ROLL")
-      MiaServer.Dice.higher?(state.announced, state.dice) ->
-        player_lost_aftermath(%{state | :playerno => prev_playerno(state)}, "CAUGHT BLUFFING")
+      data.dice == nil ->
+        player_lost(data, "SEE BEFORE FIRST ROLL")
+      MiaServer.Dice.higher?(data.announced, data.dice) ->
+        player_lost(%{data | :playerno => prev_playerno(data)}, "CAUGHT BLUFFING")
       true ->
-        player_lost_aftermath(state, "SEE FAILED")
+        player_lost(data, "SEE FAILED")
     end
   end
 
   defp handle_announce(data, d1, d2) do
     case MiaServer.Dice.new(d1, d2) do
       :invalid ->
-        {:wait_for_registrations, player_lost_aftermath(data, "INVALID TURN"), :check_registry}
+        {:wait_for_registrations, player_lost(data, "INVALID TURN"), :check_registry}
       announced_dice ->
         {_ip, _port, name} = MiaServer.Playerlist.get_participating_player(data.playerno)
         broadcast_message("ANNOUNCED;#{name};#{announced_dice}")
         cond do
           data.announced != nil and MiaServer.Dice.higher?(data.announced, announced_dice) ->
-            {:wait_for_registrations, player_lost_aftermath(data, "ANNOUNCED LOSING DICE"), :check_registry}
+            {:wait_for_registrations, player_lost(data, "ANNOUNCED LOSING DICE"), :check_registry}
           not MiaServer.Dice.mia?(data.dice) and MiaServer.Dice.mia?(announced_dice) ->
-            {:wait_for_registrations, player_lost_aftermath(data, "LIED ABOUT MIA"), :check_registry}
+            {:wait_for_registrations, player_lost(data, "LIED ABOUT MIA"), :check_registry}
           MiaServer.Dice.mia?(data.dice) and MiaServer.Dice.mia?(announced_dice) ->
-            {:wait_for_registrations, player_won_aftermath(data, "MIA"), :check_registry}
+            {:wait_for_registrations, player_won(data, "MIA"), :check_registry}
           true ->
-            {:round,
-            %{data | :playerno => next_playerno(data), :announced => announced_dice},
-            :send_your_turn}
+            {:round, %{data | :playerno => next_playerno(data), :announced => announced_dice}, :send_your_turn}
         end
     end
   end
