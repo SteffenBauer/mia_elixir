@@ -60,20 +60,20 @@ defmodule MiaServer.Game do
       {:cast, {:join, ip, port, token}, :wait_for_joins} ->
         MiaServer.Playerlist.join_player(ip, port, token)
         :keep_state_and_data
-      {:cast, {:invalid, ^currentip, _port, _msg}, :round} ->
-        {:next_state, :wait_for_registrations, player_lost(data, "INVALID TURN"), {:state_timeout, @timeout, :check_registry}}
       {:cast, {:player_sees, ^currenttoken}, :round} ->
         {:next_state, :wait_for_registrations, handle_see(data), {:state_timeout, @timeout, :check_registry}}
       {:cast, {:player_rolls, ^currenttoken}, :round} ->
         {:keep_state, %{data | :action => :rolls}}
-      {:cast, {:inject, d1, d2}, :round} ->
-        Logger.debug("Inject: Next die roll will be #{d1},#{d2}")
-        {:keep_state, %{data | :injected => MiaServer.Dice.new(d1, d2)}}
       {:cast, {:player_announces, d1, d2, ^currenttoken}, :wait_for_announce} ->
         {state, data, timeout} = handle_announce(data, d1, d2)
         {:next_state, state, data, {:state_timeout, @timeout, timeout}}
       {:cast, {:player_announces, _, _, ^currenttoken}, _state} ->
         {:next_state, :wait_for_registrations, player_lost(data, "INVALID TURN"), {:state_timeout, @timeout, :check_registry}}
+      {:cast, {:invalid, ^currentip, _port, _msg}, :round} ->
+        {:next_state, :wait_for_registrations, player_lost(data, "INVALID TURN"), {:state_timeout, @timeout, :check_registry}}
+      {:cast, {:inject, d1, d2}, :round} ->
+        Logger.debug("Inject: Next die roll will be #{d1},#{d2}")
+        {:keep_state, %{data | :injected => MiaServer.Dice.new(d1, d2)}}
 
       {:state_timeout, :check_registry, :wait_for_registrations} ->
         {state, timeout} = check_registry()
