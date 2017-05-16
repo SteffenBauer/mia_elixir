@@ -4,63 +4,78 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import random
+import socket
+import re
+import time
 
-def data_gen(t=0):
-    value1 = 50
-    value2 = 50
+HOST = 'localhost'
+PORT = 4080
+
+def connect_to_miaserver():
+    sock.settimeout(2)
     while True:
-        yield t, value1, value2
-        value1 += random.randint(-2,2)
-        value2 += random.randint(-2,2)
-        t += 1
+        sock.sendto("REGISTER_SPECTATOR", (HOST, PORT))
+        try:
+            data = sock.recv(1024)
+            if data.startswith("REGISTERED"): break
+        except socket.timeout:
+            print "MIA Server does not respond, retrying"
+    print "Connected to MIA Server"
+    sock.setblocking(1)
+
+def retrieve_data(turn=0):
+    while True:
+        data = sock.recv(1024)
+        if data.startswith("SCORE;"):
+            _, _, scorelist = data.strip().partition(";")
+            rawscores = [r.partition(":") for r in scorelist.split(",")]
+            scores = [(p,s) for p,_,s in rawscores]
+            turn += 1
+            yield turn, scores
+
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+xdata = []
+ydata = dict()
 
 def init():
     ax.set_ylim(0, 100)
     ax.set_xlim(0, 20)
     del xdata[:]
-    del y1data[:]
-    del y2data[:]
-    line1.set_data(xdata, y1data)
-    line2.set_data(xdata, y2data)
-    return (line1, line2)
+    return []
 
 fig, ax = plt.subplots()
-line1, = ax.plot([], [], lw=2, label="Line 1")
-line2, = ax.plot([], [], lw=2, label="Line 2")
 ax.grid()
 legend = plt.legend(loc=2)
-xdata, y1data, y2data = [], [], []
 
 def run(data):
     # update the data
-    t, y1, y2 = data
-    xdata.append(t)
-    y1data.append(y1)
-    y2data.append(y2)
+    turn, scores = data
+    xdata.append(turn)
+    ax.clear()
+    lines = []
+
     xmin, xmax = ax.get_xlim()
     ymin, ymax = ax.get_ylim()
 
-    if t >= xmax:
-        ax.set_xlim(xmin, xmax+1)
-        ax.figure.canvas.draw()
-    if y1 >= ymax or y2 >= ymax:
-        ax.set_ylim(ymin, max(y1,y2)+1)
-        ax.figure.canvas.draw()
-    if y1 <= ymin or y2 <= ymin:
-        ax.set_ylim(min(y1,y2)-1, ymax)
+    stale = False
+    if turn >= xmax:
+        ax.set_xlim(xmin, turn+5)
+        stale = True
+    if stale:
         ax.figure.canvas.draw()
 
-    line1.set_data(xdata, y1data)
-    line2.set_data(xdata, y2data)
+    for p,s in scores:
+        if p in ydata:
+            ydata[p].append(s)
+        else:
+            ydata[p] = [s]
+        lines.append(ax.plot(xdata, ydata[p], lw=1, label=p))
 
-    legend.get_texts()[0].set_text("Line 1:" + str(y1))
-    legend.get_texts()[1].set_text("Line 2:" + str(y2))
+    return lines
 
-    return (line1, line2)
-
-ani = animation.FuncAnimation(fig, run, data_gen, blit=False, interval=200,
-                              repeat=False, init_func=init)
 
 if __name__ == "__main__":
+    connect_to_miaserver()
+    ani = animation.FuncAnimation(fig, run, retrieve_data, blit=False, interval=200,
+                              repeat=False, init_func=init)
     plt.show()
-
