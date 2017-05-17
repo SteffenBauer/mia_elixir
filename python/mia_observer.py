@@ -3,10 +3,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-import random
 import socket
-import re
-import time
 
 HOST = 'localhost'
 PORT = 4080
@@ -29,47 +26,48 @@ def retrieve_data(turn=0):
         if data.startswith("SCORE;"):
             _, _, scorelist = data.strip().partition(";")
             rawscores = [r.partition(":") for r in scorelist.split(",")]
-            scores = [(p,s) for p,_,s in rawscores]
+            scores = [(p,int(s)) for p,_,s in rawscores]
             turn += 1
             yield turn, scores
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 xdata = []
 ydata = dict()
+xmin, xmax, ymin, ymax = (0,20,-1,20)
+fig, ax = plt.subplots()
 
 def init():
-    ax.set_ylim(0, 100)
+    ax.set_ylim(0, 20)
     ax.set_xlim(0, 20)
     del xdata[:]
     return []
 
-fig, ax = plt.subplots()
-ax.grid()
-legend = plt.legend(loc=2)
-
 def run(data):
-    # update the data
+    global xmin, xmax, ymin, ymax
     turn, scores = data
     xdata.append(turn)
     ax.clear()
     lines = []
-
-    xmin, xmax = ax.get_xlim()
-    ymin, ymax = ax.get_ylim()
-
-    stale = False
-    if turn >= xmax:
-        ax.set_xlim(xmin, turn+5)
-        stale = True
-    if stale:
-        ax.figure.canvas.draw()
 
     for p,s in scores:
         if p in ydata:
             ydata[p].append(s)
         else:
             ydata[p] = [s]
-        lines.append(ax.plot(xdata, ydata[p], lw=1, label=p))
+        if len(ydata[p]) < len(xdata):
+            ydata[p] = ([0] * (len(xdata)-len(ydata[p]))) + ydata[p]
+        if int(s*1.05) > ymax: ymax = int(s*1.10)
+        lines.append(ax.plot(xdata, ydata[p], lw=2, label=p+": "+str(s)))
+
+    if int(turn*1.05) > xmax: xmax = int(turn*1.10)
+
+    ax.set_xlim(xmin, xmax)
+    ax.set_ylim(ymin, ymax)
+    ax.grid()
+
+    plt.legend(loc=2)
+
+    ax.figure.canvas.draw()
 
     return lines
 

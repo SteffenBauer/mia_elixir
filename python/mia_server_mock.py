@@ -22,9 +22,12 @@ if __name__ == "__main__":
             spectator = addr
             sock.sendto("REGISTERED\n", addr)
             break
-    for i in range(10):
-        time.sleep(1)
-        lost = random.randrange(3)
+    for i in range(1000):
+        time.sleep(0.1)
+        if i == 50:
+            names.append("player4")
+            scores.append(0)
+        lost = random.randrange(len(names))
         scores = [s+1 for s in scores]
         scores[lost] -= 1
         sock.sendto("PLAYER LOST;" + names[lost] + ";DID NOT TAKE TURN\n", addr)
