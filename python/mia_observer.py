@@ -29,6 +29,8 @@ def retrieve_data(turn=0):
             scores = [(p,int(s)) for p,_,s in rawscores]
             turn += 1
             yield turn, scores
+        elif data.startswith("PLAYER LOST;"):
+            print data
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 xdata = []

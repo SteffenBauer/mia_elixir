@@ -143,6 +143,7 @@ defmodule MiaServer.Game do
   defp player_lost(data, reason) do
     {_ip, _port, name} = MiaServer.Playerlist.get_participating_player(data.playerno)
     broadcast_message("PLAYER LOST;#{name};#{reason}")
+    Logger.info("PLAYER LOST;#{name};#{reason}")
     update_score(data.playerno, :lost)
     get_scoremsg() |> broadcast_message()
     %MiaServer.Game{:round => data.round+1}
@@ -154,6 +155,7 @@ defmodule MiaServer.Game do
       name
     end
     broadcast_message("PLAYER LOST;" <> Enum.join(players,",") <> ";#{reason}")
+    Logger.info("PLAYER LOST;" <> Enum.join(players,",") <> ";#{reason}")
     update_score(data.playerno, :won)
     get_scoremsg() |> broadcast_message()
     %MiaServer.Game{:round => data.round+1}

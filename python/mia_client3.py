@@ -6,9 +6,9 @@ import random
 SERVERHOST = 'localhost'
 SERVERPORT = 4080
 
-LOCALIP = '127.0.0.3'
-LOCALPORT = 4083
-LOCALNAME = "HIGHER_65_SEE"
+LOCALIP = '127.0.0.4'
+LOCALPORT = 4084
+LOCALNAME = "20_PERCENT_SEE"
 
 def higher(dice_a, dice_b):
   ad1, ad2 = dice_a[0], dice_a[1]
@@ -62,7 +62,7 @@ def play_mia(sock):
       announced = (d1, d2)
     elif data.startswith("YOUR TURN;"):
       _, _, token = data.strip().partition(";")
-      if announced == None or not higher(announced, (6,5)):
+      if announced == None or random.uniform(0,100) > 20.0:
         sock.sendto("ROLL;" + token, (SERVERHOST, SERVERPORT))
       else:
         sock.sendto("SEE;" + token, (SERVERHOST, SERVERPORT))
