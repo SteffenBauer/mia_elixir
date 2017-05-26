@@ -3,8 +3,6 @@ defmodule MiaServer.GameplayTest do
   require Logger
 
   @timeout round(Application.get_env(:mia_server, :timeout) * 1.25)
-  @players 2
-  @spectators 2
 
   setup do
     Application.start(:mia_server)
@@ -105,7 +103,7 @@ defmodule MiaServer.GameplayTest do
 
   defp player_lost(game, playerno, reason) do
     check_broadcast_message(game[:sockets], "PLAYER LOST;#{game[:players][playerno][:name]};#{reason}\n")
-    scoremsg = "SCORE;" <> (1..@players
+    scoremsg = "SCORE;" <> (1..2
       |> Enum.to_list
       |> Enum.map(fn n -> "#{game[:players][n][:name]}:#{if(n == playerno, do: 0, else: 1)}" end)
       |> Enum.sort()

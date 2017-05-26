@@ -1,19 +1,8 @@
 # EchoServer
 
-**TODO: Add description**
+Very simple elixir server application to demonstrate basic UDP communication. Does nothing but receive a line string via UDP and sending it back to its source.
 
-## Installation
+## Running
 
-If [available in Hex](https://hex.pm/docs/publish), the package can be installed
-by adding `echo_server` to your list of dependencies in `mix.exs`:
-
-```elixir
-def deps do
-  [{:echo_server, "~> 0.1.0"}]
-end
-```
-
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
-and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at [https://hexdocs.pm/echo_server](https://hexdocs.pm/echo_server).
+> mix echo.server
 
